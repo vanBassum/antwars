@@ -100,14 +100,14 @@ export async function createTerrainMaterial(waterY = -0.28) {
   const load   = (path) => loader.loadAsync(path);
 
   const [grassD, grassN, mudD, mudN, pathD, pathN, wetD, wetN] = await Promise.all([
-    load('assets/textures/stylized/grass_04_2k/grass_04_basecolor_2k.png'),
-    load('assets/textures/stylized/grass_04_2k/grass_04_normal_gl_2k.png'),
-    load('assets/textures/stylized/ground_07_2k/ground_07_basecolor_2k.png'),
-    load('assets/textures/stylized/ground_07_2k/ground_07_normal_gl_2k.png'),
-    load('assets/textures/stylized/ground_08_2k/ground_08_basecolor_2k.png'),
-    load('assets/textures/stylized/ground_08_2k/ground_08_normal_gl_2k.png'),
-    load('assets/textures/stylized/moss_ground_01_2k/moss_groud_01_Base_Color_2k.png'),
-    load('assets/textures/stylized/moss_ground_01_2k/moss_groud_01_Normal_gl_2k.png'),
+    load('assets/textures/dry_ground_01_diff_2k.jpg'),   // grass slot
+    load('assets/textures/dry_ground_01_nor_2k.jpg'),
+    load('assets/textures/brown_mud_03_diff_2k.jpg'),    // mud slot
+    load('assets/textures/brown_mud_03_nor_2k.jpg'),
+    load('assets/textures/dirt_floor_diff_2k.jpg'),      // path slot
+    load('assets/textures/dirt_floor_nor_2k.jpg'),
+    load('assets/textures/brown_mud_03_diff_2k.jpg'),    // wet slot (reuse mud)
+    load('assets/textures/brown_mud_03_nor_2k.jpg'),
   ]);
 
   for (const t of [grassD, grassN, mudD, mudN, pathD, pathN, wetD, wetN]) {
