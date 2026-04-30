@@ -1,0 +1,26 @@
+{
+  "grass": {
+    "density": 0.7,
+    "clusterSize": [
+      3,
+      8
+    ],
+    "flowerChance": 0.1,
+    "toyChance": 0.02
+  },
+  "sugar": {
+    "crumbDensity": 0.6,
+    "wrapperChance": 0.3,
+    "antTrailStrength": 1.0
+  },
+  "water": {
+    "reedsChance": 0.4,
+    "lilyPadChance": 0.2,
+    "mudDarkening": 0.5
+  },
+  "global": {
+    "propDensity": 0.3,
+    "noiseScale": 0.15,
+    "avoidOverlap": true
+  }
+}

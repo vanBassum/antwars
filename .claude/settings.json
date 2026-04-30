@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls /c/Users/bas/Downloads*)",
+      "Bash(unzip -l /c/Users/bas/Downloads/*)",
+      "Bash(unzip -p /c/Users/bas/Downloads/* *)",
+      "Bash(cp /c/Users/bas/Downloads/* *)"
+    ]
+  }
+}
