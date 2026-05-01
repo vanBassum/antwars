@@ -186,7 +186,20 @@ export class PlaceTool {
     const entityHit = this._cast(ndc, this._placedMeshes());
     if (entityHit) {
       const entry = this._entryFromMesh(entityHit.object);
-      if (entry) { this._select(entry); this._dragging = true; return; }
+      if (entry) {
+        if (e.shiftKey) {
+          const go       = entry.def.createObject();
+          go.object3D.position.copy(entry.go.object3D.position);
+          this._game.add(go);
+          const dupe = { go, def: entry.def, heightDelta: entry.heightDelta };
+          this._placed.push(dupe);
+          this._select(dupe);
+        } else {
+          this._select(entry);
+        }
+        this._dragging = true;
+        return;
+      }
     }
 
     this._deselect();
