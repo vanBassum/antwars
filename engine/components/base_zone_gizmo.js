@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Component } from '../gameobject.js';
 
-const TEAM_COLORS = [0x4488ff, 0xff4444, 0x44ff88, 0xffaa00];
+const SEGMENTS = 64;
+const COLOR    = 0x00ff44;
 
 export class BaseZoneGizmo extends Component {
   constructor(map, { cellSize = 1, heightScale = 10 } = {}) {
@@ -19,35 +20,35 @@ export class BaseZoneGizmo extends Component {
 
   _addGizmo(base) {
     const { _map: map, _cellSize: cs, _heightScale: hs } = this;
-    const cell  = map.get(base.x, base.z);
-    const wx    = (base.x - map.width / 2) * cs;
-    const wz    = (base.z - map.depth / 2) * cs;
-    const wy    = cell.height * hs + 0.15;
-    const r     = base.radius * cs;
-    const color = TEAM_COLORS[base.teamIndex % TEAM_COLORS.length];
+    const cell = map.get(base.x, base.z);
+    const wx   = (base.x - map.width / 2) * cs;
+    const wz   = (base.z - map.depth / 2) * cs;
+    const wy   = cell.height * hs + 0.2;
+    const r    = base.radius * cs;
+    const mat  = new THREE.LineBasicMaterial({ color: COLOR });
 
-    const mat = new THREE.MeshBasicMaterial({
-      color,
-      side:        THREE.DoubleSide,
-      transparent: true,
-      opacity:     0.85,
-      depthWrite:  false,
-    });
-
-    // Outer ring
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(r - 0.25, r + 0.25, 64).rotateX(-Math.PI / 2),
+    // Ring
+    const pts = [];
+    for (let i = 0; i <= SEGMENTS; i++) {
+      const a = (i / SEGMENTS) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r));
+    }
+    const ring = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
       mat
     );
     ring.position.set(wx, wy, wz);
     this.gameObject.object3D.add(ring);
 
-    // Center dot
-    const dot = new THREE.Mesh(
-      new THREE.CircleGeometry(0.8, 32).rotateX(-Math.PI / 2),
+    // Cross at center
+    const cross = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 1),
+      ]),
       mat
     );
-    dot.position.set(wx, wy, wz);
-    this.gameObject.object3D.add(dot);
+    cross.position.set(wx, wy, wz);
+    this.gameObject.object3D.add(cross);
   }
 }
