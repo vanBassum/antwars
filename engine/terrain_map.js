@@ -13,9 +13,9 @@ const THRESHOLDS = [
   [0.25, TerrainType.DEEP_WATER],
   [0.35, TerrainType.SHALLOW_WATER],
   [0.42, TerrainType.SAND],
-  [0.58, TerrainType.GRASS],
-  [0.70, TerrainType.DIRT],
-  [0.83, TerrainType.HILL],
+  [0.62, TerrainType.GRASS],
+  [0.76, TerrainType.DIRT],
+  [0.90, TerrainType.HILL],
 ];
 
 function typeFromHeight(h) {
@@ -77,10 +77,10 @@ export class TerrainMap {
       for (let x = 0; x < w; x++) {
         const nx = x / w, nz = z / d;
         raw[z * w + x] =
-          noise(nx * 4,  nz * 4)           // large landmasses
-        + noise(nx * 8,  nz * 8)  * 0.5    // regional hills
-        + noise(nx * 16, nz * 16) * 0.25   // local detail
-        + noise(nx * 32, nz * 32) * 0.125; // fine texture
+          noise(nx * 3,  nz * 3)           // large landmasses
+        + noise(nx * 6,  nz * 6)  * 0.40   // rolling hills
+        + noise(nx * 12, nz * 12) * 0.12   // gentle undulation
+        + noise(nx * 24, nz * 24) * 0.04;  // subtle surface variation
       }
     }
 

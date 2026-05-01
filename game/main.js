@@ -19,7 +19,7 @@ game.add(sun);
 const map = new TerrainMap({ width: 128, depth: 128, seed: 42 });
 
 const terrain = new GameObject('Terrain');
-terrain.addComponent(new TerrainRenderer(map));
+terrain.addComponent(new TerrainRenderer(map, { heightScale: 5 }));
 game.add(terrain);
 
 game.start();
