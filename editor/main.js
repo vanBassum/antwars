@@ -8,7 +8,7 @@ import { Toolbar } from './toolbar.js';
 import { TerrainTool } from './tools/terrain_tool.js';
 import { PlaceTool } from './tools/place_tool.js';
 import { ExportTool } from './tools/export_tool.js';
-import { preloadEntityModels } from './entity_registry.js';
+import { ENTITY_DEFS, preloadEntityModels } from './entity_registry.js';
 
 const viewport = document.getElementById('viewport');
 const game = new Game({ container: viewport });
@@ -42,5 +42,11 @@ await preloadEntityModels();
 const placeTool = new PlaceTool(game);
 toolbar.register(placeTool);
 toolbar.register(new ExportTool(terrainTool, placeTool));
+
+try {
+  const data = await fetch('assets/world/world.json').then(r => r.json());
+  terrainTool.loadSettings(data.terrain ?? null);
+  placeTool.loadEntities(data.entities ?? [], ENTITY_DEFS);
+} catch { /* no world file yet */ }
 
 game.start();

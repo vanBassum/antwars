@@ -27,10 +27,16 @@ export class ExportTool {
       </div>
       <hr class="panel-separator">
       <button class="panel-btn" id="exp-load">Load world.json</button>
-      <button class="panel-btn" id="exp-dl" style="margin-top:6px">Download world.json</button>`;
+      <button class="panel-btn" id="exp-dl" style="margin-top:6px">Download world.json</button>
+      <button class="panel-btn danger" id="exp-clear" style="margin-top:6px">Clear All</button>`;
 
-    container.querySelector('#exp-load').addEventListener('click', () => this._load(container));
-    container.querySelector('#exp-dl').addEventListener('click',  () => this._download());
+    container.querySelector('#exp-load').addEventListener('click',  () => this._load(container));
+    container.querySelector('#exp-dl').addEventListener('click',   () => this._download());
+    container.querySelector('#exp-clear').addEventListener('click', () => {
+      this._terrainTool.loadSettings(null);
+      this._placeTool.loadEntities([], ENTITY_DEFS);
+      this._render(container);
+    });
   }
 
   _load(container) {
