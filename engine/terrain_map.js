@@ -125,41 +125,61 @@ export class TerrainMap {
 
   _placeBases(cells, baseDefs) {
     const { width: w, depth: d } = this;
+    const n      = baseDefs.length;
     const BASE_R = 8;
     const MARGIN = Math.ceil(BASE_R * 1.5);
 
-    // Collect every valid candidate sorted flattest-first
-    const candidates = [];
-    for (let z = MARGIN; z < d - MARGIN; z++) {
-      for (let x = MARGIN; x < w - MARGIN; x++) {
-        if (!VALID_BASE_TYPES.has(cells[z * w + x].type)) continue;
-        candidates.push({ x, z, v: this._localVariance(cells, x, z, BASE_R) });
-      }
-    }
-    candidates.sort((a, b) => a.v - b.v);
+    // 8 outer cells of a 3x3 grid, clockwise from top-left.
+    // Center cell (1,1) is always free — never used for bases.
+    const OUTER = [
+      [0,0],[1,0],[2,0],
+      [2,1],
+      [2,2],[1,2],[0,2],
+      [0,1],
+    ];
 
-    // Greedy placement: each base must be at least minDist from all previous ones.
-    // If nothing qualifies, relax the distance by 20 % and retry.
-    const MIN_START = Math.min(w, d) * 0.45;
-    const MIN_FLOOR = BASE_R * 3;
+    // Pick N evenly-spaced slots from the 8 outer positions
+    const slots = Array.from({ length: n }, (_, i) =>
+      OUTER[Math.round(i * 8 / n) % 8]
+    );
+
+    const cellW = (w - 2 * MARGIN) / 3;
+    const cellD = (d - 2 * MARGIN) / 3;
     const bases = [];
 
-    for (let i = 0; i < baseDefs.length; i++) {
-      let best = null;
-      for (let dist = MIN_START; dist >= MIN_FLOOR && !best; dist *= 0.8) {
-        const d2 = dist * dist;
-        best = candidates.find(c =>
-          bases.every(b => (c.x - b.x) ** 2 + (c.z - b.z) ** 2 >= d2)
-        );
+    for (let i = 0; i < n; i++) {
+      const [col, row] = slots[i];
+      const xMin = Math.round(MARGIN + col * cellW);
+      const xMax = Math.round(MARGIN + (col + 1) * cellW);
+      const zMin = Math.round(MARGIN + row * cellD);
+      const zMax = Math.round(MARGIN + (row + 1) * cellD);
+
+      // Flattest valid cell inside the assigned grid square
+      let bestX = -1, bestZ = -1, bestV = Infinity;
+      for (let z = zMin; z < zMax; z++) {
+        for (let x = xMin; x < xMax; x++) {
+          if (!VALID_BASE_TYPES.has(cells[z * w + x].type)) continue;
+          const v = this._localVariance(cells, x, z, BASE_R);
+          if (v < bestV) { bestV = v; bestX = x; bestZ = z; }
+        }
       }
-      if (best) {
-        bases.push({
-          id:        i,
-          x:         best.x,
-          z:         best.z,
-          radius:    BASE_R,
-          teamIndex: baseDefs[i].teamIndex ?? i,
-        });
+
+      // Fallback: grid square was all water — find nearest valid flat cell
+      if (bestX < 0) {
+        const gcx = (xMin + xMax) / 2, gcz = (zMin + zMax) / 2;
+        let bestScore = Infinity;
+        for (let z = MARGIN; z < d - MARGIN; z++) {
+          for (let x = MARGIN; x < w - MARGIN; x++) {
+            if (!VALID_BASE_TYPES.has(cells[z * w + x].type)) continue;
+            const dist2 = (x - gcx) ** 2 + (z - gcz) ** 2;
+            const score = dist2 + this._localVariance(cells, x, z, BASE_R) * 500;
+            if (score < bestScore) { bestScore = score; bestX = x; bestZ = z; }
+          }
+        }
+      }
+
+      if (bestX >= 0) {
+        bases.push({ id: i, x: bestX, z: bestZ, radius: BASE_R, teamIndex: baseDefs[i].teamIndex ?? i });
       }
     }
 
