@@ -24,6 +24,34 @@ const VALID_BASE_TYPES = new Set([
   TerrainType.HILL,
 ]);
 
+function heapPush(heap, item) {
+  heap.push(item);
+  let i = heap.length - 1;
+  while (i > 0) {
+    const p = (i - 1) >> 1;
+    if (heap[p][0] <= heap[i][0]) break;
+    [heap[p], heap[i]] = [heap[i], heap[p]];
+    i = p;
+  }
+}
+
+function heapPop(heap) {
+  const top = heap[0], last = heap.pop();
+  if (heap.length > 0) {
+    heap[0] = last;
+    let i = 0;
+    for (;;) {
+      let m = i, l = 2*i+1, r = 2*i+2;
+      if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+      if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+      if (m === i) break;
+      [heap[m], heap[i]] = [heap[i], heap[m]];
+      i = m;
+    }
+  }
+  return top;
+}
+
 // Simple seeded LCG — reproducible random in [0, 1)
 function makeLCG(seed) {
   let s = seed | 0;
@@ -200,13 +228,19 @@ export class TerrainMap {
     const { width: w, depth: d } = this;
     if (this.bases.length < 2) return;
 
-    const WATER_H    = 0.35; // anything below this is water
-    const BRIDGE_H   = 0.40; // raised cells land at sand level
-    const CORRIDOR_R = 2;    // half-width of the carved land bridge
+    const WATER_H      = 0.35;
+    const BRIDGE_H     = 0.40; // minimum height for raised cells (sand level)
+    const CORRIDOR_R   = 2;    // half-width of raised corridor
+    const SMOOTH_R     = CORRIDOR_R + 2; // wider area to smooth edges into terrain
+    const SMOOTH_PASSES = 4;
+
+    // Noise gives the pathfinder terrain variation — paths meander through
+    // shallower water rather than cutting straight across
+    const pathNoise = makeNoise(this.seed ^ 0x5f3759df);
 
     const isWater = idx => cells[idx].height < WATER_H;
 
-    // BFS on walkable cells only — returns a visited bitfield
+    // ── BFS flood-fill on walkable cells ───────────────────────────────────
     const walkableBFS = start => {
       const visited = new Uint8Array(w * d);
       const queue   = [start.x + start.z * w];
@@ -215,7 +249,7 @@ export class TerrainMap {
         const idx = queue[head];
         const x = idx % w, z = (idx / w) | 0;
         for (const [dx, dz] of [[-1,0],[1,0],[0,-1],[0,1]]) {
-          const nx = x + dx, nz = z + dz;
+          const nx = x+dx, nz = z+dz;
           if (nx < 0 || nx >= w || nz < 0 || nz >= d) continue;
           const ni = nx + nz * w;
           if (visited[ni] || isWater(ni)) continue;
@@ -226,61 +260,111 @@ export class TerrainMap {
       return visited;
     };
 
-    // BFS through all cells (including water) — returns shortest path as [{x,z}]
-    const shortestPath = (from, to) => {
-      const parent  = new Int32Array(w * d).fill(-1);
-      const visited = new Uint8Array(w * d);
-      const toIdx   = to.x + to.z * w;
-      const queue   = [from.x + from.z * w];
-      visited[queue[0]] = 1;
-      for (let head = 0; head < queue.length; head++) {
-        const idx = queue[head];
+    // ── Dijkstra through all cells ─────────────────────────────────────────
+    // Cost on water = depth × scale + noise, so paths prefer shallow water
+    // and meander naturally rather than cutting a straight line.
+    const dijkstraPath = (from, to) => {
+      const dist   = new Float32Array(w * d).fill(Infinity);
+      const parent = new Int32Array(w * d).fill(-1);
+      const heap   = [];
+      const fromIdx = from.x + from.z * w;
+      const toIdx   = to.x   + to.z   * w;
+
+      dist[fromIdx] = 0;
+      heapPush(heap, [0, fromIdx]);
+
+      // 8-directional movement — diagonal steps cost √2 so paths curve smoothly
+      const DIRS = [
+        [-1,0,1],[1,0,1],[0,-1,1],[0,1,1],
+        [-1,-1,1.414],[-1,1,1.414],[1,-1,1.414],[1,1,1.414],
+      ];
+
+      while (heap.length > 0) {
+        const [cost, idx] = heapPop(heap);
         if (idx === toIdx) {
           const path = [];
           for (let cur = idx; cur !== -1; cur = parent[cur])
             path.push({ x: cur % w, z: (cur / w) | 0 });
           return path.reverse();
         }
+        if (cost > dist[idx]) continue;
+
         const x = idx % w, z = (idx / w) | 0;
-        for (const [dx, dz] of [[-1,0],[1,0],[0,-1],[0,1]]) {
-          const nx = x + dx, nz = z + dz;
+        for (const [dx, dz, step] of DIRS) {
+          const nx = x+dx, nz = z+dz;
           if (nx < 0 || nx >= w || nz < 0 || nz >= d) continue;
           const ni = nx + nz * w;
-          if (visited[ni]) continue;
-          visited[ni] = 1;
-          parent[ni] = idx;
-          queue.push(ni);
+          const h  = cells[ni].height;
+          const terrain = h >= WATER_H
+            ? 1
+            : 1 + (BRIDGE_H - h) * 12 + (pathNoise(nx * 0.12, nz * 0.12) + 1) * 3;
+          const newCost = dist[idx] + step * terrain;
+          if (newCost < dist[ni]) {
+            dist[ni] = newCost;
+            parent[ni] = idx;
+            heapPush(heap, [newCost, ni]);
+          }
         }
       }
       return null;
     };
 
     let changed = false;
+    const affected = new Set();
 
     for (let i = 1; i < this.bases.length; i++) {
-      // Re-check each iteration so earlier bridges help later ones
       const reachable = walkableBFS(this.bases[0]);
       const dest      = this.bases[i];
       if (reachable[dest.x + dest.z * w]) continue;
 
-      const path = shortestPath(this.bases[0], dest);
+      const path = dijkstraPath(this.bases[0], dest);
       if (!path) continue;
 
+      // Raise water cells within corridor radius
       for (const { x, z } of path) {
         for (let dz = -CORRIDOR_R; dz <= CORRIDOR_R; dz++) {
           for (let dx = -CORRIDOR_R; dx <= CORRIDOR_R; dx++) {
-            if (dx * dx + dz * dz > CORRIDOR_R * CORRIDOR_R) continue;
-            const nx = x + dx, nz = z + dz;
+            if (dx*dx + dz*dz > CORRIDOR_R*CORRIDOR_R) continue;
+            const nx = x+dx, nz = z+dz;
             if (nx < 0 || nx >= w || nz < 0 || nz >= d) continue;
             const cell = cells[nz * w + nx];
             if (cell.height < BRIDGE_H) { cell.height = BRIDGE_H; changed = true; }
           }
         }
+        // Track wider area for smoothing pass
+        for (let dz = -SMOOTH_R; dz <= SMOOTH_R; dz++) {
+          for (let dx = -SMOOTH_R; dx <= SMOOTH_R; dx++) {
+            if (dx*dx + dz*dz > SMOOTH_R*SMOOTH_R) continue;
+            const nx = x+dx, nz = z+dz;
+            if (nx >= 0 && nx < w && nz >= 0 && nz < d)
+              affected.add(nz * w + nx);
+          }
+        }
       }
     }
 
-    if (changed)
-      for (const cell of cells) cell.type = typeFromHeight(cell.height);
+    if (!changed) return;
+
+    // ── Cellular automata smoothing ────────────────────────────────────────
+    // Average each affected cell with its 4 neighbours over several passes.
+    // This blends the raised land bridge into surrounding terrain so it looks
+    // like a natural isthmus rather than a flat ridge dropped into the water.
+    for (let pass = 0; pass < SMOOTH_PASSES; pass++) {
+      for (const idx of affected) {
+        const x = idx % w, z = (idx / w) | 0;
+        let sum = cells[idx].height, count = 1;
+        for (const [dx, dz] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nx = x+dx, nz = z+dz;
+          if (nx < 0 || nx >= w || nz < 0 || nz >= d) continue;
+          sum += cells[nz * w + nx].height;
+          count++;
+        }
+        // Blend toward neighbour average but never sink below land level
+        cells[idx].height = Math.max(BRIDGE_H, sum / count);
+      }
+    }
+
+    for (const cell of cells) cell.type = typeFromHeight(cell.height);
   }
 
   // Variance of heights within radius r around (cx, cz)
