@@ -219,7 +219,7 @@ export class PlaceTool {
   }
 
   _onWheel(e) {
-    const step = e.deltaY * (e.ctrlKey ? 0.0002 : 0.005);
+    const step = e.deltaY * (e.shiftKey ? 0.0002 : 0.005);
 
     if (this._spawn) {
       e.stopPropagation(); // prevent camera zoom
