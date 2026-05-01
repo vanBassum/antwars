@@ -13,6 +13,18 @@ export class TerrainTool {
 
   getSettings() { return this._lastSettings; }
 
+  loadSettings(settings) {
+    this._clear();
+    if (!settings) return;
+    const { seed, width, depth, heightScale } = settings;
+    this._lastSettings = settings;
+    const map     = new TerrainMap({ width, depth, seed });
+    const terrain = new GameObject('Terrain');
+    terrain.addComponent(new TerrainRenderer(map, { heightScale }));
+    this._game.add(terrain);
+    this._terrain = terrain;
+  }
+
   buildPanel(container) {
     container.innerHTML = `
       <div class="panel-title">Terrain Generator</div>

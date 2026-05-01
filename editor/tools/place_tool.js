@@ -25,6 +25,21 @@ export class PlaceTool {
 
   getPlaced() { return this._placed; }
 
+  loadEntities(entities, defs) {
+    for (const { go } of this._placed) this._game.remove(go);
+    this._placed = [];
+    this._deselect();
+    const defMap = new Map(defs.map(d => [d.id, d]));
+    for (const e of entities) {
+      const def = defMap.get(e.id);
+      if (!def) { console.warn(`WorldLoader: unknown entity "${e.id}"`); continue; }
+      const go = def.createObject();
+      go.object3D.position.fromArray(e.p);
+      this._game.add(go);
+      this._placed.push({ go, def, heightDelta: e.hd ?? 0 });
+    }
+  }
+
   buildPanel(container) {
     const cards = ENTITY_DEFS.map(def => `
       <div class="entity-card" data-id="${def.id}">

@@ -19,7 +19,7 @@ game.add(sun);
 await preloadEntityModels();
 
 try {
-  const res  = await fetch('game/world.json');
+  const res  = await fetch('assets/world/world.json');
   const data = await res.json();
   new WorldLoader(ENTITY_DEFS).load(game, data);
 } catch {
