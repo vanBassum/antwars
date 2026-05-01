@@ -125,12 +125,9 @@ export class TerrainMap {
 
   _placeBases(cells, baseDefs) {
     const { width: w, depth: d } = this;
-    const n          = baseDefs.length;
-    const BASE_R     = 8;
-    const MARGIN     = Math.ceil(BASE_R * 1.5);
-    const MIN_CENTER = Math.min(w, d) * 0.18; // keep away from dead center
-
-    const cx = w / 2, cz = d / 2;
+    const n      = baseDefs.length;
+    const BASE_R = 8;
+    const MARGIN = Math.ceil(BASE_R * 1.5);
 
     // Pre-compute local height variance for every candidate cell
     const variance = new Float32Array(w * d).fill(Infinity);
@@ -141,27 +138,20 @@ export class TerrainMap {
       }
     }
 
-    // Divide the map into N angular sectors from center; pick flattest cell per sector
-    const bases = [];
+    // Divide the usable map into N equal vertical strips along X.
+    // Each base picks the flattest valid cell within its strip — guaranteed separation.
+    const usableW = w - 2 * MARGIN;
+    const bases   = [];
+
     for (let i = 0; i < n; i++) {
-      const aStart = (i / n) * Math.PI * 2 - Math.PI;
-      const aEnd   = ((i + 1) / n) * Math.PI * 2 - Math.PI;
+      const xMin = MARGIN + Math.round((i / n) * usableW);
+      const xMax = MARGIN + Math.round(((i + 1) / n) * usableW);
 
       let bestX = -1, bestZ = -1, bestV = Infinity;
 
       for (let z = MARGIN; z < d - MARGIN; z++) {
-        for (let x = MARGIN; x < w - MARGIN; x++) {
+        for (let x = xMin; x < xMax; x++) {
           const v = variance[z * w + x];
-          if (v === Infinity) continue;
-
-          const dx = x - cx, dz = z - cz;
-          if (dx * dx + dz * dz < MIN_CENTER * MIN_CENTER) continue;
-
-          if (n > 1) {
-            const angle = Math.atan2(dz, dx);
-            if (angle < aStart || angle > aEnd) continue;
-          }
-
           if (v < bestV) { bestV = v; bestX = x; bestZ = z; }
         }
       }
