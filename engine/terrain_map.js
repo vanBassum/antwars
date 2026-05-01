@@ -125,6 +125,7 @@ export class TerrainMap {
     if (baseDefs.length > 0) {
       this.bases = this._placeBases(cells, baseDefs);
       this._flattenBases(cells, this.bases);
+      this._ensureConnectivity(cells);
     }
 
     return cells;
@@ -193,6 +194,93 @@ export class TerrainMap {
     }
 
     return bases;
+  }
+
+  _ensureConnectivity(cells) {
+    const { width: w, depth: d } = this;
+    if (this.bases.length < 2) return;
+
+    const WATER_H    = 0.35; // anything below this is water
+    const BRIDGE_H   = 0.40; // raised cells land at sand level
+    const CORRIDOR_R = 2;    // half-width of the carved land bridge
+
+    const isWater = idx => cells[idx].height < WATER_H;
+
+    // BFS on walkable cells only — returns a visited bitfield
+    const walkableBFS = start => {
+      const visited = new Uint8Array(w * d);
+      const queue   = [start.x + start.z * w];
+      visited[queue[0]] = 1;
+      for (let head = 0; head < queue.length; head++) {
+        const idx = queue[head];
+        const x = idx % w, z = (idx / w) | 0;
+        for (const [dx, dz] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nx = x + dx, nz = z + dz;
+          if (nx < 0 || nx >= w || nz < 0 || nz >= d) continue;
+          const ni = nx + nz * w;
+          if (visited[ni] || isWater(ni)) continue;
+          visited[ni] = 1;
+          queue.push(ni);
+        }
+      }
+      return visited;
+    };
+
+    // BFS through all cells (including water) — returns shortest path as [{x,z}]
+    const shortestPath = (from, to) => {
+      const parent  = new Int32Array(w * d).fill(-1);
+      const visited = new Uint8Array(w * d);
+      const toIdx   = to.x + to.z * w;
+      const queue   = [from.x + from.z * w];
+      visited[queue[0]] = 1;
+      for (let head = 0; head < queue.length; head++) {
+        const idx = queue[head];
+        if (idx === toIdx) {
+          const path = [];
+          for (let cur = idx; cur !== -1; cur = parent[cur])
+            path.push({ x: cur % w, z: (cur / w) | 0 });
+          return path.reverse();
+        }
+        const x = idx % w, z = (idx / w) | 0;
+        for (const [dx, dz] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nx = x + dx, nz = z + dz;
+          if (nx < 0 || nx >= w || nz < 0 || nz >= d) continue;
+          const ni = nx + nz * w;
+          if (visited[ni]) continue;
+          visited[ni] = 1;
+          parent[ni] = idx;
+          queue.push(ni);
+        }
+      }
+      return null;
+    };
+
+    let changed = false;
+
+    for (let i = 1; i < this.bases.length; i++) {
+      // Re-check each iteration so earlier bridges help later ones
+      const reachable = walkableBFS(this.bases[0]);
+      const dest      = this.bases[i];
+      if (reachable[dest.x + dest.z * w]) continue;
+
+      const path = shortestPath(this.bases[0], dest);
+      if (!path) continue;
+
+      for (const { x, z } of path) {
+        for (let dz = -CORRIDOR_R; dz <= CORRIDOR_R; dz++) {
+          for (let dx = -CORRIDOR_R; dx <= CORRIDOR_R; dx++) {
+            if (dx * dx + dz * dz > CORRIDOR_R * CORRIDOR_R) continue;
+            const nx = x + dx, nz = z + dz;
+            if (nx < 0 || nx >= w || nz < 0 || nz >= d) continue;
+            const cell = cells[nz * w + nx];
+            if (cell.height < BRIDGE_H) { cell.height = BRIDGE_H; changed = true; }
+          }
+        }
+      }
+    }
+
+    if (changed)
+      for (const cell of cells) cell.type = typeFromHeight(cell.height);
   }
 
   // Variance of heights within radius r around (cx, cz)
