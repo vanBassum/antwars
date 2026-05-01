@@ -21,11 +21,10 @@ export class CameraRig extends Component {
   start() {
     const { game } = this.gameObject;
 
-    this._cam = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 500);
+    const el  = game.renderer.domElement;
+    this._cam = new THREE.PerspectiveCamera(45, el.clientWidth / el.clientHeight || 1, 0.1, 500);
     game.camera = this._cam;
     this._apply();
-
-    const el = game.renderer.domElement;
 
     el.addEventListener('wheel', (e) => {
       this._dist = Math.max(DIST_MIN, Math.min(DIST_MAX, this._dist + e.deltaY * 0.05));

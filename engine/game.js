@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 
 export class Game {
-  constructor() {
+  constructor({ container = document.body } = {}) {
     this.gameObjects = [];
     this._lastTime   = 0;
     this.camera      = null;
+    this._container  = container;
 
     this._initRenderer();
     this._initScene();
@@ -15,15 +16,23 @@ export class Game {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(this.renderer.domElement);
 
-    window.addEventListener('resize', () => {
-      if (!this.camera) return;
-      this.camera.aspect = window.innerWidth / window.innerHeight;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
+    const w = this._container.clientWidth  || window.innerWidth;
+    const h = this._container.clientHeight || window.innerHeight;
+    this.renderer.setSize(w, h);
+    this._container.appendChild(this.renderer.domElement);
+
+    const ro = new ResizeObserver(() => {
+      const w = this._container.clientWidth;
+      const h = this._container.clientHeight;
+      if (!w || !h) return;
+      if (this.camera) {
+        this.camera.aspect = w / h;
+        this.camera.updateProjectionMatrix();
+      }
+      this.renderer.setSize(w, h);
     });
+    ro.observe(this._container);
   }
 
   _initScene() {
