@@ -1,0 +1,182 @@
+:root {
+  --bg:     rgba(16, 16, 20, 0.88);
+  --border: rgba(255,255,255,0.07);
+  --text:   #d0d0d0;
+  --dim:    #666;
+  --accent: #1a7fe0;
+  --font:   system-ui, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  overflow: hidden;
+  background: #000;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* ─── Panel base ─── */
+.panel {
+  position: fixed;
+  z-index: 100;
+  background: var(--bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+}
+
+#panel-hierarchy {
+  top: 0; left: 0;
+  width: 220px; height: 100vh;
+  border-right: 1px solid var(--border);
+}
+#panel-inspector {
+  top: 0; right: 0;
+  width: 260px; height: 100vh;
+  border-left: 1px solid var(--border);
+}
+#panel-prefabs {
+  bottom: 0;
+  left: 220px; right: 260px;
+  height: 130px;
+  border-top: 1px solid var(--border);
+}
+
+/* ─── Panel header ─── */
+.panel-header {
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ph-btn {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+.ph-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+
+/* ─── Hierarchy ─── */
+.tree-scroll { flex: 1; overflow-y: auto; }
+
+.tree-root {
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #999;
+  user-select: none;
+}
+.tree-item {
+  padding: 5px 12px 5px 24px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-item:hover    { background: rgba(255,255,255,0.05); }
+.tree-item.selected { background: #0e3d7a; }
+.tree-icon { font-size: 12px; flex-shrink: 0; }
+
+/* ─── Inspector ─── */
+.insp-scroll { flex: 1; overflow-y: auto; padding: 12px; }
+.insp-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.insp-section { margin-bottom: 14px; }
+.insp-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.t-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+.t-label { font-size: 11px; font-weight: 700; color: #555; width: 12px; flex-shrink: 0; }
+.t-fields { display: flex; gap: 3px; flex: 1; }
+.t-field { flex: 1; min-width: 0; }
+.t-field > span { font-size: 9px; color: #555; display: block; margin-bottom: 1px; }
+.t-field input, .f-input {
+  width: 100%;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 3px;
+  color: #e0e0e0;
+  padding: 3px 5px;
+  font-size: 11px;
+  outline: none;
+  box-sizing: border-box;
+}
+.t-field input:focus, .f-input:focus { border-color: var(--accent); }
+
+.f-row { margin-bottom: 6px; }
+.f-row label { font-size: 11px; color: #888; display: block; margin-bottom: 2px; }
+.f-row .f-input { font-size: 12px; padding: 4px 6px; }
+
+.insp-btn {
+  display: block;
+  width: 100%;
+  padding: 6px;
+  margin-top: 6px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.insp-btn:hover { filter: brightness(1.15); }
+.insp-empty { padding: 12px; font-size: 11px; color: #444; }
+
+/* ─── Prefabs ─── */
+.prefabs-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  overflow-x: auto;
+}
+.prefab-card {
+  flex-shrink: 0;
+  width: 72px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 8px 4px 6px;
+  cursor: grab;
+  text-align: center;
+  user-select: none;
+  transition: background 0.1s, border-color 0.1s;
+}
+.prefab-card:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.22); }
+.prefab-card:active { cursor: grabbing; }
+.prefab-icon { font-size: 26px; display: block; }
+.prefab-name { font-size: 10px; color: #888; display: block; margin-top: 3px; }
