@@ -29,6 +29,15 @@ export const ENTITY_DEFS = [
       return go;
     },
   }),
+  new EntityDef({
+    id: 'anthill', name: 'Ant Hill', icon: '🐜', yOffset: 0,
+    modelUrl: 'assets/models/AntHill.glb',
+    createObject() {
+      const go = new GameObject('Ant Hill');
+      go.object3D.add(_clone(this.modelUrl));
+      return go;
+    },
+  }),
 ];
 
 export async function preloadEntityModels() {
