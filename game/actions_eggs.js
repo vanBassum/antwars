@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Action } from '../ai/goap/action.js';
+import { Action } from '../engine/ai/goap/action.js';
 import { Mover } from '../engine/components/mover.js';
 import { SocketAttacher } from '../engine/components/socket_attacher.js';
 import { PropLoader } from './prop_loader.js';

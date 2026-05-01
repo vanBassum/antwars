@@ -1,4 +1,4 @@
-import { ResourceManager } from '../game/resources.js';
+import { ResourceManager } from '../resources.js';
 
 const RESOURCE_TYPES = [
   { type: 'sugar', icon: '🍬', label: 'Sugar' },

@@ -1,4 +1,4 @@
-import { Component } from '../../engine/gameobject.js';
+import { Component } from '../../gameobject.js';
 import { Planner } from './planner.js';
 
 const planner = new Planner();

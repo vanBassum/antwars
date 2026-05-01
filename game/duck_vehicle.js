@@ -1,5 +1,5 @@
 import { Component } from '../engine/gameobject.js';
-import { GOAPAgent } from '../ai/goap/goap_agent.js';
+import { GOAPAgent } from '../engine/ai/goap/goap_agent.js';
 import { GameObject } from '../engine/gameobject.js';
 import { ModelRenderer } from '../engine/components/model_renderer.js';
 import { Mover } from '../engine/components/mover.js';

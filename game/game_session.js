@@ -7,9 +7,9 @@ import { Nursery } from './nursery.js';
 import { ModelRenderer } from '../engine/components/model_renderer.js';
 import { GameObject } from '../engine/gameobject.js';
 import { SelectionManager } from './selection_manager.js';
-import { HUD } from '../ui/hud.js';
-import { DebugOverlay } from '../ui/debug_overlay.js';
-import { DebugInspector } from '../ui/debug_inspector.js';
+import { HUD } from './ui/hud.js';
+import { DebugOverlay } from './ui/debug_overlay.js';
+import { DebugInspector } from './ui/debug_inspector.js';
 
 export function startSession(game, { anthill, sugarNodes, duckGO, heightAt }) {
   const workers      = [];
