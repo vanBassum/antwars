@@ -53,6 +53,7 @@ export class Game {
     this.gameObjects.push(gameObject);
     this.scene.add(gameObject.object3D);
     gameObject.start();
+    this.onSceneChange?.();
     return gameObject;
   }
 
@@ -60,6 +61,7 @@ export class Game {
     this.gameObjects = this.gameObjects.filter(g => g !== gameObject);
     this.scene.remove(gameObject.object3D);
     gameObject.destroy();
+    this.onSceneChange?.();
   }
 
   start() {

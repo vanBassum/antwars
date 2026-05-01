@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { ENTITY_DEFS } from '../entity_registry.js';
 
 export class PlaceTool {
-  constructor(game) {
+  constructor(game, selection = null) {
     this._game             = game;
+    this._selection        = selection;
     this._placed           = []; // [{ go, def, heightDelta }]
     this._selected         = null; // ref into _placed
     this._helper           = null;
@@ -288,13 +289,16 @@ export class PlaceTool {
     this._repoLastTerrainY = entry.go.object3D.position.y - entry.def.yOffset - entry.heightDelta;
     this._helper           = new THREE.BoxHelper(entry.go.object3D, 0xffff00);
     this._game.scene.add(this._helper);
+    this._selection?.set(entry.go);
   }
 
   _deselect() {
     if (this._helper) { this._game.scene.remove(this._helper); this._helper = null; }
-    this._selected         = null;
-    this._dragging         = false;
+    const prev     = this._selected;
+    this._selected = null;
+    this._dragging = false;
     this._repoLastTerrainY = null;
+    if (prev && this._selection?.current === prev.go) this._selection?.clear();
   }
 
   _removeSelected() {

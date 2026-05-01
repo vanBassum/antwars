@@ -9,6 +9,9 @@ import { TerrainTool } from './tools/terrain_tool.js';
 import { PlaceTool } from './tools/place_tool.js';
 import { ExportTool } from './tools/export_tool.js';
 import { ENTITY_DEFS, preloadEntityModels } from './entity_registry.js';
+import { Selection } from './selection.js';
+import { SceneTree } from './scene_tree.js';
+import { Inspector } from './inspector.js';
 
 const viewport = document.getElementById('viewport');
 const game = new Game({ container: viewport });
@@ -39,9 +42,12 @@ const terrainTool = new TerrainTool(game);
 toolbar.register(terrainTool);
 
 await preloadEntityModels();
-const placeTool = new PlaceTool(game);
+const placeTool = new PlaceTool(game, Selection);
 toolbar.register(placeTool);
 toolbar.register(new ExportTool(terrainTool, placeTool));
+
+new SceneTree(game, document.getElementById('hierarchy'), Selection);
+new Inspector(document.getElementById('inspector'), Selection);
 
 try {
   const data = await fetch('assets/world/world.json').then(r => r.json());

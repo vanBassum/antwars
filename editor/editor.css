@@ -157,3 +157,108 @@ body {
   width: 100% !important;
   height: 100% !important;
 }
+
+/* --- Hierarchy & Inspector panels (right side) --- */
+#hierarchy, #inspector {
+  background: #1e1e1e;
+  border-left: 1px solid #333;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+#hierarchy  { width: 180px; min-width: 180px; }
+#inspector  { width: 220px; min-width: 220px; }
+
+.panel-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid #2a2a2a;
+  flex-shrink: 0;
+}
+
+.panel-empty {
+  padding: 12px;
+  font-size: 11px;
+  color: #555;
+}
+
+/* --- Tree nodes --- */
+.tree-node {
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ccc;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-node:hover   { background: #2a2a2a; }
+.tree-node.selected { background: #0e4d8a; color: #fff; }
+
+.tree-icon { font-size: 13px; flex-shrink: 0; }
+
+/* --- Inspector --- */
+.inspector-body {
+  padding: 10px 12px;
+}
+.inspector-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin-bottom: 8px;
+}
+.inspector-group-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #666;
+  margin: 8px 0 6px;
+}
+.insp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.insp-row-label {
+  width: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #777;
+  flex-shrink: 0;
+}
+.insp-row-fields {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+}
+.insp-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+  font-size: 9px;
+  color: #666;
+  gap: 1px;
+}
+.insp-field input {
+  width: 100%;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 3px;
+  color: #e0e0e0;
+  padding: 3px 4px;
+  font-size: 11px;
+  outline: none;
+  min-width: 0;
+}
+.insp-field input:focus { border-color: #0e7fe1; }
