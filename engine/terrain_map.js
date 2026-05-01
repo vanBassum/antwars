@@ -132,16 +132,27 @@ export class TerrainMap {
     // 8 outer cells of a 3x3 grid, clockwise from top-left.
     // Center cell (1,1) is always free — never used for bases.
     const OUTER = [
-      [0,0],[1,0],[2,0],
-      [2,1],
-      [2,2],[1,2],[0,2],
-      [0,1],
+      [0,0],[1,0],[2,0],  // 0 top-left  1 top-center  2 top-right
+      [2,1],              // 3 right-center
+      [2,2],[1,2],[0,2],  // 4 bot-right  5 bot-center  6 bot-left
+      [0,1],              // 7 left-center
     ];
 
-    // Pick N evenly-spaced slots from the 8 outer positions
-    const slots = Array.from({ length: n }, (_, i) =>
-      OUTER[Math.round(i * 8 / n) % 8]
-    );
+    // Explicit slot assignments per player count — easy to read and adjust
+    const SLOTS_BY_COUNT = [
+      [],                     // 0
+      [0],                    // 1
+      [0, 4],                 // 2  opposite corners
+      [0, 2, 5],              // 3  triangle
+      [0, 2, 4, 6],           // 4  four corners
+      [0, 2, 4, 6, 1],        // 5
+      [0, 2, 4, 6, 1, 5],     // 6
+      [0, 2, 4, 6, 1, 3, 5],  // 7
+      [0, 1, 2, 3, 4, 5, 6, 7], // 8
+    ];
+
+    const slotIndices = SLOTS_BY_COUNT[Math.min(n, 8)] ?? SLOTS_BY_COUNT[8];
+    const slots = slotIndices.slice(0, n).map(i => OUTER[i]);
 
     const cellW = (w - 2 * MARGIN) / 3;
     const cellD = (d - 2 * MARGIN) / 3;
