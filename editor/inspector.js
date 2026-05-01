@@ -21,6 +21,7 @@ export class Inspector {
 
     const { position: p, rotation: r, scale: s } = go.object3D;
     const isTerrain = this._terrain && go === this._terrain.go;
+    const isEntity  = !!go._entityDef;
 
     this._el.innerHTML = `
       <div class="panel-header">Inspector</div>
@@ -32,12 +33,14 @@ export class Inspector {
           ${this._row('R','r', [toDeg(r.x), toDeg(r.y), toDeg(r.z)], 1)}
           ${this._row('S','s', [f4(s.x), f4(s.y), f4(s.z)], 0.1)}
         </div>
-        ${isTerrain ? this._terrainBlock() : ''}
+        ${isEntity  ? this._entityBlock(go)  : ''}
+        ${isTerrain ? this._terrainBlock()   : ''}
       </div>`;
 
     this._el.querySelectorAll('.t-inp').forEach(inp =>
       inp.addEventListener('input', () => this._applyTransform(inp)));
 
+    if (isEntity)  this._wireEntity(go);
     if (isTerrain) this._wireTerrain();
   }
 
@@ -66,6 +69,20 @@ export class Inspector {
       case 'sy': o.scale.y    = v;        break;
       case 'sz': o.scale.z    = v;        break;
     }
+  }
+
+  _entityBlock(go) {
+    return `<div class="insp-section">
+      <div class="insp-section-title">Entity</div>
+      <div class="f-row"><label>Player</label><input class="f-input" type="number" id="ei-player" value="${go._player ?? 1}" step="1" min="1" max="8"></div>
+    </div>`;
+  }
+
+  _wireEntity(go) {
+    this._el.querySelector('#ei-player')?.addEventListener('input', e => {
+      const v = parseInt(e.target.value);
+      if (!isNaN(v)) go._player = v;
+    });
   }
 
   _terrainBlock() {

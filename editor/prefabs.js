@@ -36,6 +36,7 @@ export class Prefabs {
       const go = def.createObject();
       go._entityDef   = def;
       go._heightDelta = e.hd ?? 0;
+      go._player      = e.player ?? 1;
       go.object3D.position.fromArray(e.p);
       this._game.add(go);
     }
@@ -45,9 +46,10 @@ export class Prefabs {
     return this._game.gameObjects
       .filter(go => go._entityDef)
       .map(go => ({
-        id: go._entityDef.id,
-        p:  go.object3D.position.toArray().map(v => +v.toFixed(4)),
-        hd: +(go._heightDelta ?? 0).toFixed(4),
+        id:     go._entityDef.id,
+        p:      go.object3D.position.toArray().map(v => +v.toFixed(4)),
+        hd:     +(go._heightDelta ?? 0).toFixed(4),
+        player: go._player ?? 1,
       }));
   }
 
@@ -162,6 +164,7 @@ export class Prefabs {
           const dupe = go._entityDef.createObject();
           dupe._entityDef   = go._entityDef;
           dupe._heightDelta = go._heightDelta;
+          dupe._player      = go._player ?? 1;
           dupe.object3D.position.copy(go.object3D.position);
           this._game.add(dupe);
           this._sel.set(dupe);
@@ -223,6 +226,7 @@ export class Prefabs {
         const go = def.createObject();
         go._entityDef   = def;
         go._heightDelta = heightDelta;
+        go._player      = 1;
         go.object3D.position.set(hit.x, hit.y + def.yOffset + heightDelta, hit.z);
         this._game.add(go);
         this._sel.set(go);
