@@ -24,6 +24,15 @@ const VALID_BASE_TYPES = new Set([
   TerrainType.HILL,
 ]);
 
+// Simple seeded LCG — reproducible random in [0, 1)
+function makeLCG(seed) {
+  let s = seed | 0;
+  return () => {
+    s = Math.imul(s, 1664525) + 1013904223 | 0;
+    return (s >>> 0) / 0x100000000;
+  };
+}
+
 function typeFromHeight(h) {
   for (const [limit, type] of THRESHOLDS) {
     if (h < limit) return type;
@@ -156,42 +165,31 @@ export class TerrainMap {
 
     const cellW = (w - 2 * MARGIN) / 3;
     const cellD = (d - 2 * MARGIN) / 3;
+
+    // Each base gets its own RNG stream derived from the map seed + index
     const bases = [];
 
     for (let i = 0; i < n; i++) {
+      const rng = makeLCG(this.seed ^ (i * 0x9e3779b9));
+
       const [col, row] = slots[i];
       const xMin = Math.round(MARGIN + col * cellW);
       const xMax = Math.round(MARGIN + (col + 1) * cellW);
       const zMin = Math.round(MARGIN + row * cellD);
       const zMax = Math.round(MARGIN + (row + 1) * cellD);
 
-      // Flattest valid cell inside the assigned grid square
-      let bestX = -1, bestZ = -1, bestV = Infinity;
-      for (let z = zMin; z < zMax; z++) {
-        for (let x = xMin; x < xMax; x++) {
-          if (!VALID_BASE_TYPES.has(cells[z * w + x].type)) continue;
-          const v = this._localVariance(cells, x, z, BASE_R);
-          if (v < bestV) { bestV = v; bestX = x; bestZ = z; }
-        }
-      }
+      // Inner region — keep base away from grid square edges by BASE_R
+      const ixMin = xMin + BASE_R;
+      const ixMax = xMax - BASE_R;
+      const izMin = zMin + BASE_R;
+      const izMax = zMax - BASE_R;
 
-      // Fallback: grid square was all water — find nearest valid flat cell
-      if (bestX < 0) {
-        const gcx = (xMin + xMax) / 2, gcz = (zMin + zMax) / 2;
-        let bestScore = Infinity;
-        for (let z = MARGIN; z < d - MARGIN; z++) {
-          for (let x = MARGIN; x < w - MARGIN; x++) {
-            if (!VALID_BASE_TYPES.has(cells[z * w + x].type)) continue;
-            const dist2 = (x - gcx) ** 2 + (z - gcz) ** 2;
-            const score = dist2 + this._localVariance(cells, x, z, BASE_R) * 500;
-            if (score < bestScore) { bestScore = score; bestX = x; bestZ = z; }
-          }
-        }
-      }
+      // Random position within inner region (terrain type doesn't matter —
+      // _flattenBases will force the height to valid land regardless)
+      const bx = ixMin + Math.floor(rng() * (ixMax - ixMin));
+      const bz = izMin + Math.floor(rng() * (izMax - izMin));
 
-      if (bestX >= 0) {
-        bases.push({ id: i, x: bestX, z: bestZ, radius: BASE_R, teamIndex: baseDefs[i].teamIndex ?? i });
-      }
+      bases.push({ id: i, x: bx, z: bz, radius: BASE_R, teamIndex: baseDefs[i].teamIndex ?? i });
     }
 
     return bases;
@@ -228,7 +226,8 @@ export class TerrainMap {
       const r2     = r * r;
       const i2     = innerR * innerR;
 
-      // Target height = average of the inner half-radius area
+      // Target height = average of inner area, clamped to grass/dirt range
+      // so water or mountain zones get forced to buildable land
       let sum = 0, count = 0;
       for (let dz = -innerR; dz <= innerR; dz++) {
         for (let dx = -innerR; dx <= innerR; dx++) {
@@ -239,7 +238,9 @@ export class TerrainMap {
           count++;
         }
       }
-      const targetH = count > 0 ? sum / count : 0.5;
+      const BASE_H_MIN = 0.45; // low end of GRASS
+      const BASE_H_MAX = 0.73; // high end of DIRT
+      const targetH = Math.max(BASE_H_MIN, Math.min(BASE_H_MAX, count > 0 ? sum / count : 0.55));
 
       // Blend heights toward targetH — full at center, zero at edge
       for (let dz = -r; dz <= r; dz++) {
