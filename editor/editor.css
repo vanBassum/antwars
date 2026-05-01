@@ -115,6 +115,36 @@ body {
   margin: 10px 0;
 }
 
+/* --- Entity grid (place tool) --- */
+.entity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.entity-card {
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 5px;
+  padding: 8px 4px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.1s, border-color 0.1s;
+  user-select: none;
+}
+.entity-card:hover { background: #3a3a3a; }
+.entity-card.active { border-color: #0e7fe1; background: #1a3a5a; }
+
+.entity-icon { font-size: 20px; display: block; }
+.entity-name { font-size: 10px; color: #aaa; display: block; margin-top: 2px; }
+
+.hint {
+  font-size: 11px;
+  color: #666;
+  line-height: 1.6;
+}
+
 /* --- Viewport --- */
 #viewport {
   flex: 1;

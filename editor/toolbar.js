@@ -21,7 +21,10 @@ export class Toolbar {
   }
 
   activate(tool) {
-    if (this._active) this._active._btn.classList.remove('active');
+    if (this._active) {
+      this._active._btn.classList.remove('active');
+      this._active.deactivate?.();
+    }
     this._active = tool;
     tool._btn.classList.add('active');
     this._panelEl.innerHTML = '';
