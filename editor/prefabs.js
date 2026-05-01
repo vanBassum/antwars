@@ -250,6 +250,7 @@ export class Prefabs {
     const step = -e.deltaY * (e.shiftKey ? 0.0002 : 0.005);
     if (this._spawn) {
       e.stopPropagation();
+      e.preventDefault();
       this._spawn.heightDelta += step;
       if (this._spawn.ghost?.object3D.visible && this._spawn.hit) {
         this._spawn.ghost.object3D.position.y =
@@ -260,10 +261,10 @@ export class Prefabs {
     const go = this._sel.current;
     if (go?._entityDef) {
       e.stopPropagation();
+      e.preventDefault();
       go._heightDelta = (go._heightDelta ?? 0) + step;
-      if (this._drag?.terrainY != null) {
-        go.object3D.position.y = this._drag.terrainY + go._entityDef.yOffset + go._heightDelta;
-      }
+      go.object3D.position.y += step;
+      if (this._drag) this._drag.terrainY += step;
     }
   }
 }
