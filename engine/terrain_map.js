@@ -125,42 +125,38 @@ export class TerrainMap {
 
   _placeBases(cells, baseDefs) {
     const { width: w, depth: d } = this;
-    const n      = baseDefs.length;
     const BASE_R = 8;
     const MARGIN = Math.ceil(BASE_R * 1.5);
 
-    // Pre-compute local height variance for every candidate cell
-    const variance = new Float32Array(w * d).fill(Infinity);
+    // Collect every valid candidate sorted flattest-first
+    const candidates = [];
     for (let z = MARGIN; z < d - MARGIN; z++) {
       for (let x = MARGIN; x < w - MARGIN; x++) {
         if (!VALID_BASE_TYPES.has(cells[z * w + x].type)) continue;
-        variance[z * w + x] = this._localVariance(cells, x, z, BASE_R);
+        candidates.push({ x, z, v: this._localVariance(cells, x, z, BASE_R) });
       }
     }
+    candidates.sort((a, b) => a.v - b.v);
 
-    // Divide the usable map into N equal vertical strips along X.
-    // Each base picks the flattest valid cell within its strip — guaranteed separation.
-    const usableW = w - 2 * MARGIN;
-    const bases   = [];
+    // Greedy placement: each base must be at least minDist from all previous ones.
+    // If nothing qualifies, relax the distance by 20 % and retry.
+    const MIN_START = Math.min(w, d) * 0.45;
+    const MIN_FLOOR = BASE_R * 3;
+    const bases = [];
 
-    for (let i = 0; i < n; i++) {
-      const xMin = MARGIN + Math.round((i / n) * usableW);
-      const xMax = MARGIN + Math.round(((i + 1) / n) * usableW);
-
-      let bestX = -1, bestZ = -1, bestV = Infinity;
-
-      for (let z = MARGIN; z < d - MARGIN; z++) {
-        for (let x = xMin; x < xMax; x++) {
-          const v = variance[z * w + x];
-          if (v < bestV) { bestV = v; bestX = x; bestZ = z; }
-        }
+    for (let i = 0; i < baseDefs.length; i++) {
+      let best = null;
+      for (let dist = MIN_START; dist >= MIN_FLOOR && !best; dist *= 0.8) {
+        const d2 = dist * dist;
+        best = candidates.find(c =>
+          bases.every(b => (c.x - b.x) ** 2 + (c.z - b.z) ** 2 >= d2)
+        );
       }
-
-      if (bestX >= 0) {
+      if (best) {
         bases.push({
           id:        i,
-          x:         bestX,
-          z:         bestZ,
+          x:         best.x,
+          z:         best.z,
           radius:    BASE_R,
           teamIndex: baseDefs[i].teamIndex ?? i,
         });
