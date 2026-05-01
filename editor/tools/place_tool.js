@@ -23,6 +23,8 @@ export class PlaceTool {
     this._onWheel     = this._onWheel.bind(this);
   }
 
+  getPlaced() { return this._placed; }
+
   buildPanel(container) {
     const cards = ENTITY_DEFS.map(def => `
       <div class="entity-card" data-id="${def.id}">

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 export class Game {
   constructor({ container = document.body } = {}) {
@@ -40,6 +41,11 @@ export class Game {
     this.scene.background = new THREE.Color(0x87ceeb);
     this.scene.fog = new THREE.Fog(0x87ceeb, 60, 100);
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+    // Environment map so GLTF PBR materials (especially metallic ones) aren't pitch-black
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
   }
 
   add(gameObject) {

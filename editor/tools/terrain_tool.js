@@ -4,11 +4,14 @@ import { GameObject } from '../../engine/gameobject.js';
 
 export class TerrainTool {
   constructor(game) {
-    this._game    = game;
-    this._terrain = null;
-    this.icon     = '⛰';
-    this.label    = 'Terrain Generator';
+    this._game         = game;
+    this._terrain      = null;
+    this._lastSettings = null;
+    this.icon          = '⛰';
+    this.label         = 'Terrain Generator';
   }
+
+  getSettings() { return this._lastSettings; }
 
   buildPanel(container) {
     container.innerHTML = `
@@ -49,6 +52,7 @@ export class TerrainTool {
 
     this._clear();
 
+    this._lastSettings = { seed, width, depth, heightScale: hScale };
     const map     = new TerrainMap({ width, depth, seed });
     const terrain = new GameObject('Terrain');
     terrain.addComponent(new TerrainRenderer(map, { heightScale: hScale }));
