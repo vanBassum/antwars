@@ -7,6 +7,7 @@ import { MeshRenderer } from '../engine/components/mesh_renderer.js';
 import { Toolbar } from './toolbar.js';
 import { TerrainTool } from './tools/terrain_tool.js';
 import { PlaceTool } from './tools/place_tool.js';
+import { preloadEntityModels } from './entity_registry.js';
 
 const viewport = document.getElementById('viewport');
 const game = new Game({ container: viewport });
@@ -34,6 +35,8 @@ const toolbar = new Toolbar(
 );
 
 toolbar.register(new TerrainTool(game));
+
+await preloadEntityModels();
 toolbar.register(new PlaceTool(game));
 
 game.start();

@@ -140,7 +140,7 @@ export class PlaceTool {
 
   _disposeGhost(ghost) {
     ghost.object3D.traverse(obj => {
-      if (obj.isMesh) { obj.geometry.dispose(); obj.material.dispose(); }
+      if (obj.isMesh) obj.material.dispose(); // geometry may be shared with GLTF cache
     });
     this._game.scene.remove(ghost.object3D);
   }

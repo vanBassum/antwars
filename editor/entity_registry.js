@@ -1,43 +1,36 @@
-import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { EntityDef } from '../engine/entity_def.js';
 import { GameObject } from '../engine/gameobject.js';
-import { MeshRenderer } from '../engine/components/mesh_renderer.js';
 
-function mat(color) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+const _loader = new GLTFLoader();
+const _cache  = new Map(); // url → THREE.Group
+
+async function _load(url) {
+  if (_cache.has(url)) return;
+  const gltf = await _loader.loadAsync(url);
+  _cache.set(url, gltf.scene);
+}
+
+function _clone(url) {
+  const clone = _cache.get(url).clone(true);
+  clone.traverse(obj => {
+    if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; }
+  });
+  return clone;
 }
 
 export const ENTITY_DEFS = [
   new EntityDef({
-    id: 'cube', name: 'Cube', icon: '■', yOffset: 0.5,
+    id: 'watchtower', name: 'Watchtower', icon: '🗼', yOffset: 0,
+    modelUrl: 'assets/models/WatchTower.glb',
     createObject() {
-      const go = new GameObject('Cube');
-      go.addComponent(new MeshRenderer(new THREE.BoxGeometry(1, 1, 1), mat(0x7799cc)));
-      return go;
-    },
-  }),
-  new EntityDef({
-    id: 'cylinder', name: 'Cylinder', icon: '⬡', yOffset: 0.75,
-    createObject() {
-      const go = new GameObject('Cylinder');
-      go.addComponent(new MeshRenderer(new THREE.CylinderGeometry(0.5, 0.5, 1.5, 12), mat(0x77cc99)));
-      return go;
-    },
-  }),
-  new EntityDef({
-    id: 'sphere', name: 'Sphere', icon: '●', yOffset: 0.5,
-    createObject() {
-      const go = new GameObject('Sphere');
-      go.addComponent(new MeshRenderer(new THREE.SphereGeometry(0.5, 16, 12), mat(0xcc7777)));
-      return go;
-    },
-  }),
-  new EntityDef({
-    id: 'cone', name: 'Cone', icon: '▲', yOffset: 0.75,
-    createObject() {
-      const go = new GameObject('Cone');
-      go.addComponent(new MeshRenderer(new THREE.ConeGeometry(0.5, 1.5, 12), mat(0xccaa44)));
+      const go = new GameObject('Watchtower');
+      go.object3D.add(_clone(this.modelUrl));
       return go;
     },
   }),
 ];
+
+export async function preloadEntityModels() {
+  await Promise.all(ENTITY_DEFS.filter(d => d.modelUrl).map(d => _load(d.modelUrl)));
+}
