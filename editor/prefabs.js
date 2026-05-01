@@ -115,11 +115,12 @@ export class Prefabs {
   }
 
   _goFromMesh(mesh) {
-    return this._game.gameObjects.find(go => {
-      let hit = false;
-      go.object3D.traverse(o => { if (o === mesh) hit = true; });
-      return hit;
-    }) ?? null;
+    let obj = mesh;
+    while (obj) {
+      if (obj.userData?.gameObject) return obj.userData.gameObject;
+      obj = obj.parent;
+    }
+    return null;
   }
 
   // ── Spawn (drag from prefabs panel) ──────────────────────────────────────
