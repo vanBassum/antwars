@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>Armymen — World Editor</title>
-  <link rel="stylesheet" href="editor/editor.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+  </style>
   <script type="importmap">
   {
     "imports": {
@@ -14,13 +17,6 @@
   </script>
 </head>
 <body>
-  <div id="editor-root">
-    <nav id="toolbar"></nav>
-    <aside id="tool-panel"><div id="tool-panel-content"></div></aside>
-    <div id="viewport"></div>
-    <aside id="hierarchy"></aside>
-    <aside id="inspector"></aside>
-  </div>
   <script type="module" src="editor/main.js"></script>
 </body>
 </html>

@@ -1,30 +1,39 @@
 import * as THREE from 'three';
-import { ENTITY_DEFS } from '../entity_registry.js';
 
 export class PlaceTool {
   constructor(game, selection = null) {
     this._game             = game;
     this._selection        = selection;
-    this._placed           = []; // [{ go, def, heightDelta }]
-    this._selected         = null; // ref into _placed
+    this._placed           = [];
+    this._selected         = null;
     this._helper           = null;
     this._dragging         = false;
     this._repoLastTerrainY = null;
-    this._spawn            = null; // { def, ghost, hit, heightDelta }
+    this._spawn            = null;
     this._raycaster        = new THREE.Raycaster();
-    this._prevTick         = null;
-
-    this.icon  = '📦';
-    this.label = 'Place Objects';
 
     this._onMouseDown = this._onMouseDown.bind(this);
     this._onMouseMove = this._onMouseMove.bind(this);
     this._onMouseUp   = this._onMouseUp.bind(this);
     this._onKeyDown   = this._onKeyDown.bind(this);
     this._onWheel     = this._onWheel.bind(this);
+
+    const canvas = game.renderer.domElement;
+    canvas.addEventListener('mousedown', this._onMouseDown);
+    canvas.addEventListener('wheel', this._onWheel, { capture: true });
+    window.addEventListener('mousemove', this._onMouseMove);
+    window.addEventListener('mouseup',   this._onMouseUp);
+    window.addEventListener('keydown',   this._onKeyDown);
   }
 
   getPlaced() { return this._placed; }
+
+  startSpawn(def) {
+    this._cancelSpawn();
+    this._deselect();
+    this._spawn = { def, ghost: null, hit: null, heightDelta: 0 };
+    document.body.style.cursor = 'grabbing';
+  }
 
   loadEntities(entities, defs) {
     for (const { go } of this._placed) this._game.remove(go);
@@ -33,58 +42,12 @@ export class PlaceTool {
     const defMap = new Map(defs.map(d => [d.id, d]));
     for (const e of entities) {
       const def = defMap.get(e.id);
-      if (!def) { console.warn(`WorldLoader: unknown entity "${e.id}"`); continue; }
+      if (!def) { console.warn(`PlaceTool: unknown entity "${e.id}"`); continue; }
       const go = def.createObject();
       go.object3D.position.fromArray(e.p);
       this._game.add(go);
       this._placed.push({ go, def, heightDelta: e.hd ?? 0 });
     }
-  }
-
-  buildPanel(container) {
-    const cards = ENTITY_DEFS.map(def => `
-      <div class="entity-card" data-id="${def.id}">
-        <span class="entity-icon">${def.icon}</span>
-        <span class="entity-name">${def.name}</span>
-      </div>`).join('');
-
-    container.innerHTML = `
-      <div class="panel-title">Place Objects</div>
-      <div class="hint" style="margin-bottom:10px">Drag a type into the viewport</div>
-      <div class="entity-grid">${cards}</div>
-      <hr class="panel-separator">
-      <div class="hint">Click to select · Drag to move<br>Scroll to adjust height · Delete to remove</div>`;
-
-    container.querySelectorAll('.entity-card').forEach(card => {
-      card.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return;
-        const def = ENTITY_DEFS.find(d => d.id === card.dataset.id);
-        if (def) this._startSpawn(def);
-        e.preventDefault();
-      });
-    });
-
-    const canvas = this._game.renderer.domElement;
-    canvas.addEventListener('mousedown', this._onMouseDown);
-    canvas.addEventListener('wheel', this._onWheel, { capture: true });
-    window.addEventListener('mousemove', this._onMouseMove);
-    window.addEventListener('mouseup',   this._onMouseUp);
-    window.addEventListener('keydown',   this._onKeyDown);
-
-    this._prevTick    = this._game.onTick;
-    this._game.onTick = (dt) => { this._prevTick?.(dt); this._helper?.update(); };
-  }
-
-  deactivate() {
-    this._cancelSpawn();
-    const canvas = this._game.renderer.domElement;
-    canvas.removeEventListener('mousedown', this._onMouseDown);
-    canvas.removeEventListener('wheel', this._onWheel, { capture: true });
-    window.removeEventListener('mousemove', this._onMouseMove);
-    window.removeEventListener('mouseup',   this._onMouseUp);
-    window.removeEventListener('keydown',   this._onKeyDown);
-    this._game.onTick = this._prevTick;
-    this._deselect();
   }
 
   // ── Raycasting ────────────────────────────────────────────────────────────
@@ -132,14 +95,7 @@ export class PlaceTool {
     }) ?? null;
   }
 
-  // ── Spawn drag (panel → viewport) ────────────────────────────────────────
-
-  _startSpawn(def) {
-    this._cancelSpawn();
-    this._deselect();
-    this._spawn = { def, ghost: null, hit: null, heightDelta: 0 };
-    document.body.style.cursor = 'grabbing';
-  }
+  // ── Spawn drag ────────────────────────────────────────────────────────────
 
   _makeGhost(def) {
     const go = def.createObject();
@@ -157,9 +113,7 @@ export class PlaceTool {
   }
 
   _disposeGhost(ghost) {
-    ghost.object3D.traverse(obj => {
-      if (obj.isMesh) obj.material.dispose(); // geometry may be shared with GLTF cache
-    });
+    ghost.object3D.traverse(obj => { if (obj.isMesh) obj.material.dispose(); });
     this._game.scene.remove(ghost.object3D);
   }
 
@@ -189,7 +143,7 @@ export class PlaceTool {
       const entry = this._entryFromMesh(entityHit.object);
       if (entry) {
         if (e.shiftKey) {
-          const go       = entry.def.createObject();
+          const go   = entry.def.createObject();
           go.object3D.position.copy(entry.go.object3D.position);
           this._game.add(go);
           const dupe = { go, def: entry.def, heightDelta: entry.heightDelta };
@@ -202,7 +156,6 @@ export class PlaceTool {
         return;
       }
     }
-
     this._deselect();
   }
 
@@ -216,6 +169,7 @@ export class PlaceTool {
           hit.point.y + this._selected.def.yOffset + this._selected.heightDelta,
           hit.point.z,
         );
+        this._helper?.update();
       }
       return;
     }
@@ -253,7 +207,7 @@ export class PlaceTool {
     const step = -e.deltaY * (e.shiftKey ? 0.0002 : 0.005);
 
     if (this._spawn) {
-      e.stopPropagation(); // prevent camera zoom
+      e.stopPropagation();
       this._spawn.heightDelta += step;
       if (this._spawn.ghost?.object3D.visible && this._spawn.hit) {
         this._spawn.ghost.object3D.position.y =
@@ -268,6 +222,7 @@ export class PlaceTool {
       if (this._repoLastTerrainY !== null) {
         this._selected.go.object3D.position.y =
           this._repoLastTerrainY + this._selected.def.yOffset + this._selected.heightDelta;
+        this._helper?.update();
       }
     }
   }
