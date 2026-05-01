@@ -18,6 +18,12 @@ const THRESHOLDS = [
   [0.90, TerrainType.HILL],
 ];
 
+const VALID_BASE_TYPES = new Set([
+  TerrainType.GRASS,
+  TerrainType.DIRT,
+  TerrainType.HILL,
+]);
+
 function typeFromHeight(h) {
   for (const [limit, type] of THRESHOLDS) {
     if (h < limit) return type;
@@ -55,11 +61,21 @@ function makeNoise(seed) {
 }
 
 export class TerrainMap {
-  constructor({ width = 128, depth = 128, seed = 42 } = {}) {
+  /**
+   * bases: number  — how many bases to place (teamIndex assigned 0..n-1)
+   *      | array   — [{ teamIndex }, ...] for explicit team assignment
+   */
+  constructor({ width = 128, depth = 128, seed = 42, bases = 0 } = {}) {
     this.width = width;
     this.depth = depth;
     this.seed  = seed;
-    this.cells = this._generate();
+
+    const baseDefs = typeof bases === 'number'
+      ? Array.from({ length: bases }, (_, i) => ({ teamIndex: i }))
+      : bases;
+
+    this.bases = [];
+    this.cells = this._generate(baseDefs);
   }
 
   // Returns { height, type } for cell (x, z), or null if out of bounds.
@@ -68,7 +84,7 @@ export class TerrainMap {
     return this.cells[z * this.width + x];
   }
 
-  _generate() {
+  _generate(baseDefs) {
     const noise = makeNoise(this.seed);
     const { width: w, depth: d } = this;
     const raw = new Float32Array(w * d);
@@ -92,9 +108,140 @@ export class TerrainMap {
     }
     const range = max - min;
 
-    return Array.from(raw, v => {
+    const cells = Array.from(raw, v => {
       const h = (v - min) / range;
       return { height: h, type: typeFromHeight(h) };
     });
+
+    if (baseDefs.length > 0) {
+      this.bases = this._placeBases(cells, baseDefs);
+      this._flattenBases(cells, this.bases);
+    }
+
+    return cells;
+  }
+
+  // ── Base placement ──────────────────────────────────────────────────────────
+
+  _placeBases(cells, baseDefs) {
+    const { width: w, depth: d } = this;
+    const n          = baseDefs.length;
+    const BASE_R     = 8;
+    const MARGIN     = Math.ceil(BASE_R * 1.5);
+    const MIN_CENTER = Math.min(w, d) * 0.18; // keep away from dead center
+
+    const cx = w / 2, cz = d / 2;
+
+    // Pre-compute local height variance for every candidate cell
+    const variance = new Float32Array(w * d).fill(Infinity);
+    for (let z = MARGIN; z < d - MARGIN; z++) {
+      for (let x = MARGIN; x < w - MARGIN; x++) {
+        if (!VALID_BASE_TYPES.has(cells[z * w + x].type)) continue;
+        variance[z * w + x] = this._localVariance(cells, x, z, BASE_R);
+      }
+    }
+
+    // Divide the map into N angular sectors from center; pick flattest cell per sector
+    const bases = [];
+    for (let i = 0; i < n; i++) {
+      const aStart = (i / n) * Math.PI * 2 - Math.PI;
+      const aEnd   = ((i + 1) / n) * Math.PI * 2 - Math.PI;
+
+      let bestX = -1, bestZ = -1, bestV = Infinity;
+
+      for (let z = MARGIN; z < d - MARGIN; z++) {
+        for (let x = MARGIN; x < w - MARGIN; x++) {
+          const v = variance[z * w + x];
+          if (v === Infinity) continue;
+
+          const dx = x - cx, dz = z - cz;
+          if (dx * dx + dz * dz < MIN_CENTER * MIN_CENTER) continue;
+
+          if (n > 1) {
+            const angle = Math.atan2(dz, dx);
+            if (angle < aStart || angle > aEnd) continue;
+          }
+
+          if (v < bestV) { bestV = v; bestX = x; bestZ = z; }
+        }
+      }
+
+      if (bestX >= 0) {
+        bases.push({
+          id:        i,
+          x:         bestX,
+          z:         bestZ,
+          radius:    BASE_R,
+          teamIndex: baseDefs[i].teamIndex ?? i,
+        });
+      }
+    }
+
+    return bases;
+  }
+
+  // Variance of heights within radius r around (cx, cz)
+  _localVariance(cells, cx, cz, r) {
+    const { width: w, depth: d } = this;
+    let sum = 0, sum2 = 0, count = 0;
+    const r2 = r * r;
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dz * dz > r2) continue;
+        const x = cx + dx, z = cz + dz;
+        if (x < 0 || x >= w || z < 0 || z >= d) continue;
+        const h = cells[z * w + x].height;
+        sum  += h;
+        sum2 += h * h;
+        count++;
+      }
+    }
+    if (count === 0) return Infinity;
+    const mean = sum / count;
+    return sum2 / count - mean * mean;
+  }
+
+  // Smoothly flatten terrain around each base toward the local average height
+  _flattenBases(cells, bases) {
+    const { width: w, depth: d } = this;
+
+    for (const base of bases) {
+      const r      = base.radius;
+      const innerR = Math.round(r * 0.5);
+      const r2     = r * r;
+      const i2     = innerR * innerR;
+
+      // Target height = average of the inner half-radius area
+      let sum = 0, count = 0;
+      for (let dz = -innerR; dz <= innerR; dz++) {
+        for (let dx = -innerR; dx <= innerR; dx++) {
+          if (dx * dx + dz * dz > i2) continue;
+          const x = base.x + dx, z = base.z + dz;
+          if (x < 0 || x >= w || z < 0 || z >= d) continue;
+          sum += cells[z * w + x].height;
+          count++;
+        }
+      }
+      const targetH = count > 0 ? sum / count : 0.5;
+
+      // Blend heights toward targetH — full at center, zero at edge
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const dist2 = dx * dx + dz * dz;
+          if (dist2 > r2) continue;
+          const x = base.x + dx, z = base.z + dz;
+          if (x < 0 || x >= w || z < 0 || z >= d) continue;
+          const t     = 1 - Math.sqrt(dist2) / r;
+          const blend = t * t * (3 - 2 * t); // smoothstep
+          const cell  = cells[z * w + x];
+          cell.height = cell.height + (targetH - cell.height) * blend;
+        }
+      }
+    }
+
+    // Re-derive terrain types after height changes
+    for (const cell of cells) {
+      cell.type = typeFromHeight(cell.height);
+    }
   }
 }
