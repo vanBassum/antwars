@@ -22,16 +22,20 @@ const UPDATE_MS = 200;
 // its target gameObject is removed from the scene.
 export class ContextMenu {
   constructor(game, { isBlocked = () => false } = {}) {
-    this._game        = game;
-    this._isBlocked   = isBlocked; // skip click while another system owns input (e.g. placement)
-    this._raycaster   = new THREE.Raycaster();
-    this._target      = null;
-    this._menu        = null;
-    this._updateTimer = null;
+    this._game         = game;
+    this._isBlocked    = isBlocked; // skip click while another system owns input (e.g. placement)
+    this._raycaster    = new THREE.Raycaster();
+    this._target       = null;
+    this._anchor       = null;          // world-space anchor (THREE.Vector3)
+    this._projectedVec = new THREE.Vector3(); // reused each frame to avoid allocations
+    this._menu         = null;
+    this._updateTimer  = null;
+    this._rafId        = null;          // requestAnimationFrame id for per-frame reposition
 
     this._onMouseDown    = this._onMouseDown.bind(this);
     this._onDocClick     = this._onDocClick.bind(this);
     this._onKeyDown      = this._onKeyDown.bind(this);
+    this._onRaf          = this._onRaf.bind(this); // bound once so the same reference is passed to RAF (required for cancellation)
 
     game.renderer.domElement.addEventListener('mousedown', this._onMouseDown);
     document.addEventListener('mousedown', this._onDocClick);
@@ -100,19 +104,27 @@ export class ContextMenu {
   _open(target, x, y) {
     this._close();
     this._target = target;
+    this._anchor = new THREE.Vector3();
+    target.go.object3D.getWorldPosition(this._anchor);
+
     this._menu = document.createElement('div');
     this._menu.className = 'context-menu';
+    // Place at click position initially so there is no flash before the first reposition.
     this._menu.style.left = `${x + 12}px`;
     this._menu.style.top  = `${y + 12}px`;
     document.body.append(this._menu);
     this._render();
+    this._reposition(); // apply world-space projection and clamp immediately
     this._updateTimer = setInterval(() => this._update(), UPDATE_MS);
+    this._scheduleReposition();
   }
 
   _close() {
     if (this._updateTimer) { clearInterval(this._updateTimer); this._updateTimer = null; }
+    if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
     if (this._menu) { this._menu.remove(); this._menu = null; }
     this._target = null;
+    this._anchor = null;
   }
 
   _update() {
@@ -120,6 +132,61 @@ export class ContextMenu {
     // If the gameObject got removed (e.g. depleted resource), close.
     if (!this._game.gameObjects.includes(this._target.go)) { this._close(); return; }
     this._render();
+  }
+
+  // Schedule a per-frame reposition via requestAnimationFrame so the menu
+  // tracks its world-space anchor as the camera moves.
+  _scheduleReposition() {
+    this._rafId = requestAnimationFrame(this._onRaf);
+  }
+
+  _onRaf() {
+    this._rafId = null;
+    if (!this._menu || !this._target) return;
+    this._reposition();
+    this._scheduleReposition();
+  }
+
+  // Project the world-space anchor through the camera and move the menu.
+  // Closes the menu if the anchor is behind the camera or off the canvas.
+  _reposition() {
+    if (!this._target || !this._menu) return;
+    const camera = this._game.camera;
+    if (!camera) return;
+
+    // Update anchor from entity's current world position (handles moving ants, etc.).
+    this._target.go.object3D.getWorldPosition(this._anchor);
+
+    // Project world position → NDC (reuse _projectedVec to avoid per-frame allocation).
+    this._projectedVec.copy(this._anchor).project(camera);
+    const { x: nx, y: ny, z: nz } = this._projectedVec;
+
+    // Outside the view frustum → close.
+    if (nz > 1 || nz < -1) { this._close(); return; }
+
+    // Convert NDC to CSS pixel coords relative to the viewport.
+    const canvas = this._game.renderer.domElement;
+    const rect   = canvas.getBoundingClientRect();
+    const sx = (nx *  0.5 + 0.5) * rect.width  + rect.left;
+    const sy = (ny * -0.5 + 0.5) * rect.height + rect.top;
+
+    // If the anchor is outside the visible canvas, close the menu.
+    if (sx < rect.left || sx > rect.right || sy < rect.top || sy > rect.bottom) {
+      this._close(); return;
+    }
+
+    // Offset the menu slightly from the anchor point.
+    let mx = sx + 12;
+    let my = sy + 12;
+
+    // Clamp to the canvas boundaries so the menu is never partially clipped (issue #18).
+    const mw = this._menu.offsetWidth;
+    const mh = this._menu.offsetHeight;
+    mx = Math.max(rect.left + 4, Math.min(rect.right  - mw - 4, mx));
+    my = Math.max(rect.top  + 4, Math.min(rect.bottom - mh - 4, my));
+
+    this._menu.style.left = `${mx}px`;
+    this._menu.style.top  = `${my}px`;
   }
 
   _render() {
