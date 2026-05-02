@@ -105,13 +105,27 @@ export class WorkManager {
       }
     }
 
-    // Egg delivery: only dispatch when a training hut has pending requests.
+    // Egg delivery: only dispatch when a training hut has pending requests
+    // AND we don't already have enough eggs in transit to satisfy them.
+    // Without this cap, multiple preempted workers each grab an egg for the
+    // same single queue slot — only one gets delivered, the rest are wasted.
     const hutWithRequest = this._nearestTrainingHut(ant);
     if (hutWithRequest) {
-      for (const go of this._looseEggs) {
-        if ((counts.get(go) ?? 0) >= MAX_CLAIMS.egg) continue;
-        const score = this._fairScore(ant, go, 'egg', now);
-        if (score < bestScore) { best = { kind: 'egg', target: go, trainingHut: hutWithRequest }; bestScore = score; }
+      let totalRequests = 0;
+      for (const go of this._trainingHuts) {
+        const th = go.getComponent(TrainingHut);
+        if (th) totalRequests += th.queueLength;
+      }
+      let inFlightEggs = 0;
+      for (const c of this._claims.values()) {
+        if (c.kind === 'egg') inFlightEggs++;
+      }
+      if (inFlightEggs < totalRequests) {
+        for (const go of this._looseEggs) {
+          if ((counts.get(go) ?? 0) >= MAX_CLAIMS.egg) continue;
+          const score = this._fairScore(ant, go, 'egg', now);
+          if (score < bestScore) { best = { kind: 'egg', target: go, trainingHut: hutWithRequest }; bestScore = score; }
+        }
       }
     }
 

@@ -9,21 +9,34 @@ export class DeliverEggTask {
     this.trainingHut = null; // TrainingHut-bearing gameObject (delivery destination)
   }
 
-  hasTarget() { return !!this.egg; }
+  // True while we still have something to do — either fetching the egg
+  // (pre-pickup) or carrying it to the training hut (post-pickup).
+  hasTarget() { return !!this.egg || !!this.trainingHut; }
 
-  // Is the assigned egg still loose in the world?
   isStillValid() {
-    if (!this.egg) return false;
-    if (!this.egg.game?.gameObjects.includes(this.egg)) return false;
-    return !!this.egg.getComponent(EggPickup);
+    // Pre-pickup: the loose egg must still be in the field.
+    if (this.egg) {
+      if (!this.egg.game?.gameObjects.includes(this.egg)) return false;
+      return !!this.egg.getComponent(EggPickup);
+    }
+    // Post-pickup: the training hut must still exist and still want a worker.
+    if (this.trainingHut) {
+      if (!this.trainingHut.game?.gameObjects.includes(this.trainingHut)) return false;
+      const th = this.trainingHut.getComponent(TrainingHut);
+      return !!th && th.hasPendingRequest();
+    }
+    return false;
   }
 
-  // Pick up the egg — removes it from the world. Returns true on success.
+  // Pick up the egg — removes it from the world and clears our egg ref
+  // so the worker validity sweep transitions to the post-pickup phase
+  // instead of seeing "target gone" and abandoning the cycle.
   pickUp() {
     if (!this.egg) return false;
     const game = this.egg.game;
     if (!game) return false;
     game.remove(this.egg);
+    this.egg = null;
     return true;
   }
 
