@@ -52,6 +52,10 @@ export class WorkManager {
         } else if (fp.needsAttention() && used < MAX_CLAIMS.tend) {
           const d = this._dist2(ant, go);
           if (d < bestD) { best = { kind: 'tend', target: go }; bestD = d; }
+        } else if (fp.isReadyToHarvest() && used < MAX_CLAIMS.harvest) {
+          // Ripe farm — same harvest pipeline as a ResourceNode.
+          const d = this._dist2(ant, go);
+          if (d < bestD) { best = { kind: 'harvest', target: go, type: fp.yieldType() }; bestD = d; }
         }
       }
     }
@@ -70,7 +74,10 @@ export class WorkManager {
     if (!this._game.gameObjects.includes(c.target)) return false;
     if (c.kind === 'harvest') {
       const rn = c.target.getComponent(ResourceNode);
-      return !!rn && !rn.isEmpty;
+      if (rn) return !rn.isEmpty;
+      const fp = c.target.getComponent(FarmPlot);
+      if (fp) return fp.isReadyToHarvest();
+      return false;
     }
     if (c.kind === 'tend') {
       const fp = c.target.getComponent(FarmPlot);

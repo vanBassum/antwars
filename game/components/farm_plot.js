@@ -22,6 +22,14 @@ const CROP_MODELS = {
   tree:  'assets/models/Bush.glb',  // placeholder until a Tree.glb exists
 };
 
+// What each crop yields when harvested. The deposit credits this resource
+// at the hive — keeps the farm loop slotting into the same harvest pipeline
+// as ResourceNodes.
+const CROP_YIELDS = {
+  berry: 'sugar',
+  tree:  'wood',
+};
+
 const GROW_STEPS      = 5;
 const MAX_WATERINGS   = GROW_STEPS;                                                // one watering per growth step
 const FULL_SCALE      = 0.85;                                                      // trimmed so crop doesn't overflow the plot
@@ -102,11 +110,24 @@ export class FarmPlot extends Component {
   }
 
   // WorkManager queries.
-  needsSeed()      { return this._state === FARM_STATE.AWAITING_SEED; }
-  needsAttention() {
+  needsSeed()        { return this._state === FARM_STATE.AWAITING_SEED; }
+  needsAttention()   {
     return this._state === FARM_STATE.GROWING
         && this.growth < 1
         && this.waterLevel < REFILL_THRESHOLD;
+  }
+  isReadyToHarvest() { return this._state === FARM_STATE.GROWN; }
+  yieldType()        { return CROP_YIELDS[this.crop] ?? null; }
+
+  // Ant-facing — called when a harvest visit lands. Yields one unit of the
+  // crop's mapped resource type and restarts the cycle (back to
+  // AWAITING_SEED with the same crop, or with the queued pendingCrop if one
+  // was set). Returns the amount taken (0 if not harvestable).
+  harvestOne() {
+    if (!this.isReadyToHarvest()) return 0;
+    const next = this.pendingCrop ?? this.crop;
+    this._setAwaitingSeed(next);
+    return 1;
   }
 
   start() {
