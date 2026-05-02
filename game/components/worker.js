@@ -12,12 +12,17 @@ import { TendTask } from './tend_task.js';
 const SAMPLE_SPACING = 0.25;
 const WANDER_RADIUS  = 3;
 
-// Models the ant can visibly carry. Missing entries → no visual (logical
-// state still tracked).
-const CARRY_MODELS = {
-  sugar: 'assets/models/SugarBlob.glb',
-  wood:  'assets/models/Branch.glb',
-  water: 'assets/models/WaterDroplet.glb',
+// Models the ant can visibly carry. Each entry:
+//   url      — model to clone
+//   baseX    — X rotation applied first (used to lay the branch flat)
+//   tiltMax  — max ± tilt around Z (radians); a small per-pickup random
+//   heading  — Y-rotation range (radians); 2π = pointing any horizontal way
+// Per-pickup we sample a fresh heading + tilt so each ant carries its load
+// at a slightly different angle.
+const CARRY_CONFIGS = {
+  sugar: { url: 'assets/models/SugarBlob.glb',    baseX: 0,           tiltMax: 0.3, heading: Math.PI * 2 },
+  wood:  { url: 'assets/models/Branch.glb',       baseX: Math.PI / 2, tiltMax: 0.4, heading: Math.PI * 2 },
+  water: { url: 'assets/models/WaterDroplet.glb', baseX: 0,           tiltMax: 0.2, heading: Math.PI * 2 },
 };
 
 // Build a Catmull-Rom-smoothed waypoint list along a hex path.
@@ -350,12 +355,17 @@ export class Worker extends Component {
       this._blob = null;
     }
     if (!type) return;
-    const url = CARRY_MODELS[type];
-    if (!url) return;
+    const cfg = CARRY_CONFIGS[type];
+    if (!cfg) return;
     let blob;
-    try { blob = cloneModel(url); } catch { return; } // model not loaded — silently skip
+    try { blob = cloneModel(cfg.url); } catch { return; } // model not loaded — silently skip
     blob.scale.setScalar(0.25);
     blob.position.y = 0.3;
+    blob.rotation.set(
+      cfg.baseX,
+      Math.random() * cfg.heading,                 // random horizontal heading
+      (Math.random() - 0.5) * 2 * cfg.tiltMax,     // small ± tilt
+    );
     this.gameObject.object3D.add(blob);
     this._blob = blob;
   }
