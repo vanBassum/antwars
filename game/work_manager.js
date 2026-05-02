@@ -116,6 +116,10 @@ export class WorkManager {
       const rn = go.getComponent(ResourceNode);
       if (rn && !rn.isEmpty) return true;
     }
+    for (const go of this._farmPlots) {
+      const fp = go.getComponent(FarmPlot);
+      if (fp && fp.isReadyToHarvest()) return true;
+    }
     return false;
   }
   farmAvailable() {
