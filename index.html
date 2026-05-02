@@ -35,31 +35,55 @@
     .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .action-btn .action-icon { font-size: 28px; line-height: 1; }
     .action-btn .action-cost { font-size: 11px; opacity: 0.85; }
-    .farm-menu {
+    .context-menu {
       position: fixed; z-index: 1100;
       display: flex; flex-direction: column; gap: 4px;
-      padding: 6px; min-width: 140px;
-      background: rgba(0, 0, 0, 0.7); border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 8px; min-width: 180px;
+      background: rgba(0, 0, 0, 0.78); border: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 6px; color: #fff;
       font-size: 13px; backdrop-filter: blur(6px);
     }
-    .farm-menu-header {
-      font-size: 11px; opacity: 0.7; text-transform: uppercase;
-      letter-spacing: 0.5px; padding: 2px 6px 4px;
+    .context-menu-title {
+      font-size: 14px; font-weight: 600;
+      padding: 2px 4px 4px;
     }
-    .farm-crop-btn {
+    .context-menu-state {
+      font-size: 12px; opacity: 0.75; padding: 0 4px 4px;
+    }
+    .context-menu-progress {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px; font-size: 12px;
+    }
+    .context-menu-progress .progress-label {
+      min-width: 60px; opacity: 0.75;
+    }
+    .context-menu-progress .progress-bar {
+      flex: 1; height: 6px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px; overflow: hidden;
+    }
+    .context-menu-progress .progress-fill {
+      height: 100%; background: #6a8e3a;
+      transition: width 0.2s ease-out;
+    }
+    .context-menu-progress .progress-text {
+      font-variant-numeric: tabular-nums;
+      font-size: 11px; opacity: 0.85;
+      min-width: 50px; text-align: right;
+    }
+    .context-menu-btn {
       display: flex; align-items: center; gap: 8px;
       padding: 6px 8px; background: transparent;
       border: 1px solid transparent; border-radius: 4px;
       color: #fff; font-size: 13px; cursor: pointer; text-align: left;
     }
-    .farm-crop-btn:hover    { background: rgba(255, 255, 255, 0.12); }
-    .farm-crop-btn.selected {
+    .context-menu-btn:hover    { background: rgba(255, 255, 255, 0.12); }
+    .context-menu-btn.selected {
       background: rgba(255, 255, 255, 0.18);
       border-color: rgba(255, 255, 255, 0.4);
     }
-    .farm-crop-btn .crop-icon  { font-size: 18px; }
-    .farm-crop-btn .crop-label { font-weight: 500; }
+    .context-menu-btn .btn-icon  { font-size: 18px; }
+    .context-menu-btn .btn-label { font-weight: 500; }
   </style>
 <script type="importmap">
   {

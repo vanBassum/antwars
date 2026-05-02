@@ -11,7 +11,7 @@ import { Resources } from '../engine/resources.js';
 import { ResourceBar } from './resource_bar.js';
 import { ActionBar } from './action_bar.js';
 import { PlacementController } from './placement_controller.js';
-import { FarmHoverMenu } from './farm_hover_menu.js';
+import { ContextMenu } from './context_menu.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -51,7 +51,7 @@ const data = await res.json();
 new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
 
 const placement = new PlacementController(game);
-new FarmHoverMenu(game);
+new ContextMenu(game, { isBlocked: () => placement.active });
 
 function spawnWorkerAnt(commit) {
   const def  = ENTITY_DEFS.find(d => d.id === 'ant');

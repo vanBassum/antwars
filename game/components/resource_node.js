@@ -51,6 +51,19 @@ export class ResourceNode extends Component {
     );
   }
 
+  // Click-to-open context menu descriptor consumed by ContextMenu.
+  getContextMenu() {
+    const titles = { sugar: 'Sugar Node', wood: 'Wood Bush' };
+    return {
+      title: titles[this.type] ?? this.type,
+      progress: {
+        label: 'Remaining',
+        value: this._remaining / this._initial,
+        text:  `${this._remaining} / ${this._initial}`,
+      },
+    };
+  }
+
   _removeSelf() {
     const game = this.gameObject.game;
     const grid = game?.hexGrid;

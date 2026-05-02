@@ -80,7 +80,9 @@ export class PlacementController {
     const grid = this._game.hexGrid;
     if (!grid.isWalkable(hex.q, hex.r)) return;
 
-    e.stopPropagation();
+    // stopImmediate so other listeners on the canvas (e.g. ContextMenu) don't
+    // also act on this same click.
+    e.stopImmediatePropagation();
 
     const wp = grid.hexToWorld(hex.q, hex.r);
     const go = this._def.createObject();
