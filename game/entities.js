@@ -8,7 +8,7 @@ import { Worker } from './components/worker.js';
 import { FarmPlot } from './components/farm_plot.js';
 import { Queen } from './components/queen.js';
 import { EggPickup } from './components/egg_pickup.js';
-import { Nursery } from './components/nursery.js';
+import { TrainingHut } from './components/training_hut.js';
 
 export const ENTITY_DEFS = [
   new EntityDef({
@@ -100,14 +100,12 @@ export const ENTITY_DEFS = [
     },
   }),
   new EntityDef({
-    id: 'nursery', name: 'Nursery', icon: '🏒', iconUrl: 'assets/icons/Nursery.png', yOffset: 0, occupiesHex: true,
-    modelUrl: 'assets/models/AntHill.glb', // placeholder — reuses anthill model until a dedicated one exists
+    id: 'training_hut', name: 'Training Hut', icon: '🏠', iconUrl: 'assets/icons/TrainingHut.png', yOffset: 0, occupiesHex: true,
+    modelUrl: 'assets/models/TrainingHut.glb',
     createObject() {
-      const go = new GameObject('Nursery');
-      const model = cloneModel(this.modelUrl);
-      model.scale.setScalar(0.8);
-      go.object3D.add(model);
-      go.addComponent(new Nursery());
+      const go = new GameObject('Training Hut');
+      go.object3D.add(cloneModel(this.modelUrl));
+      go.addComponent(new TrainingHut());
       return go;
     },
   }),

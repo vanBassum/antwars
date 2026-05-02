@@ -101,6 +101,12 @@ function startFarmPlacement(commit) {
   placement.start(def, commit);
 }
 
+function startTrainingHutPlacement(commit) {
+  const def = ENTITY_DEFS.find(d => d.id === 'training_hut');
+  if (!def) return;
+  placement.start(def, commit);
+}
+
 new ActionBar(game.resources, [
   {
     icon:      '🐜',
@@ -117,6 +123,14 @@ new ActionBar(game.resources, [
     costLabel: '10 🪵',
     cost:      { wood: 10 },
     onActivate: startFarmPlacement,
+  },
+  {
+    icon:      '🏠',
+    iconUrl:   'assets/icons/TrainingHut.png',
+    label:     'Training Hut',
+    costLabel: '10 🪵',
+    cost:      { wood: 10 },
+    onActivate: startTrainingHutPlacement,
   },
 ]);
 

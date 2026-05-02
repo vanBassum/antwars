@@ -1,14 +1,14 @@
 import { ResourceNode } from './components/resource_node.js';
 import { FarmPlot } from './components/farm_plot.js';
 import { EggPickup } from './components/egg_pickup.js';
-import { Nursery } from './components/nursery.js';
+import { TrainingHut } from './components/training_hut.js';
 
 // Per-target concurrent-worker caps. Resource nodes get 2 (multiple ants
 // share a sugar pile reasonably); farms get 1 per work kind (one watering
 // or one seed delivery at a time is enough).
 const MAX_CLAIMS = { harvest: 2, tend: 1, seed: 1, egg: 1 };
 
-// Global egg cap: fieldEggs + nurseryEggs + inTransitEggs.
+// Global egg cap: fieldEggs + inTransitEggs.
 const EGG_CAP = 10;
 
 // Fairness weight: how quickly wait-time overtakes distance advantage.
@@ -19,10 +19,10 @@ const FAIRNESS_K = 0.3;
 // Central authority that hands out work. Tasks are derived from current
 // game state on demand (no separate task queue), so they can never go stale.
 //
-// Caching: the manager keeps two lists — gameObjects with ResourceNode and
-// gameObjects with FarmPlot — invalidated only when entities are added or
-// removed (via Game.addSceneListener). Per-frame availability checks then
-// scan those small filtered lists instead of every gameObject in the scene.
+// Caching: the manager keeps lists of gameObjects by component type,
+// invalidated only when entities are added or removed (via
+// Game.addSceneListener). Per-frame availability checks then scan those
+// small filtered lists instead of every gameObject in the scene.
 //
 // API:
 //   request(ant) → { kind, target, type? } | null
@@ -51,7 +51,7 @@ export class WorkManager {
     this._resourceNodes = []; // gameObjects with a ResourceNode component
     this._farmPlots     = []; // gameObjects with a FarmPlot component
     this._looseEggs     = []; // gameObjects with an EggPickup component
-    this._nurseries     = []; // gameObjects with a Nursery component
+    this._trainingHuts  = []; // gameObjects with a TrainingHut component
 
     // Fairness: track when each (target, kind) first became eligible.
     // Key format: gameObject instance → Map<kind, timestampSeconds>.
@@ -97,14 +97,13 @@ export class WorkManager {
       }
     }
 
-    // Egg delivery: pair each unclaimed loose egg with the nearest nursery.
-    if (this._nurseries.length > 0) {
+    // Egg delivery: only dispatch when a training hut has pending requests.
+    const hutWithRequest = this._nearestTrainingHut(ant);
+    if (hutWithRequest) {
       for (const go of this._looseEggs) {
         if ((counts.get(go) ?? 0) >= MAX_CLAIMS.egg) continue;
-        const nursery = this._nearestNursery(go);
-        if (!nursery) continue;
         const score = this._fairScore(ant, go, 'egg', now);
-        if (score < bestScore) { best = { kind: 'egg', target: go, nursery }; bestScore = score; }
+        if (score < bestScore) { best = { kind: 'egg', target: go, trainingHut: hutWithRequest }; bestScore = score; }
       }
     }
 
@@ -172,24 +171,38 @@ export class WorkManager {
   }
   eggAvailable() {
     this._refreshCaches();
-    return this._looseEggs.length > 0 && this._nurseries.length > 0;
+    if (this._looseEggs.length === 0) return false;
+    for (const go of this._trainingHuts) {
+      const th = go.getComponent(TrainingHut);
+      if (th && th.hasPendingRequest()) return true;
+    }
+    return false;
   }
 
-  // Total eggs across all states (field + nursery + in-transit).
+  // Number of loose eggs not yet claimed for delivery.
+  availableEggs() {
+    this._refreshCaches();
+    const claimed = new Set();
+    for (const c of this._claims.values()) {
+      if (c.kind === 'egg') claimed.add(c.target);
+    }
+    let count = 0;
+    for (const go of this._looseEggs) {
+      if (!claimed.has(go)) count++;
+    }
+    return count;
+  }
+
+  // Total eggs across all states (field + in-transit).
   // Queen reads this before laying to enforce the global cap.
   totalEggs() {
     this._refreshCaches();
     const fieldEggs = this._looseEggs.length;
-    let nurseryEggs = 0;
-    for (const go of this._nurseries) {
-      const n = go.getComponent(Nursery);
-      if (n) nurseryEggs += n.eggCount;
-    }
     let inTransit = 0;
     for (const c of this._claims.values()) {
       if (c.kind === 'egg') inTransit++;
     }
-    return fieldEggs + nurseryEggs + inTransit;
+    return fieldEggs + inTransit;
   }
   eggCapReached() { return this.totalEggs() >= EGG_CAP; }
 
@@ -198,12 +211,12 @@ export class WorkManager {
     this._resourceNodes = [];
     this._farmPlots     = [];
     this._looseEggs     = [];
-    this._nurseries     = [];
+    this._trainingHuts  = [];
     for (const go of this._game.gameObjects) {
       if (go.getComponent(ResourceNode)) this._resourceNodes.push(go);
       if (go.getComponent(FarmPlot))     this._farmPlots.push(go);
       if (go.getComponent(EggPickup))    this._looseEggs.push(go);
-      if (go.getComponent(Nursery))      this._nurseries.push(go);
+      if (go.getComponent(TrainingHut))  this._trainingHuts.push(go);
     }
     this._dirty = false;
   }
@@ -258,11 +271,11 @@ export class WorkManager {
     }
   }
 
-  _nearestNursery(from) {
+  _nearestTrainingHut(from) {
     let best = null, bestD = Infinity;
-    for (const go of this._nurseries) {
-      const n = go.getComponent(Nursery);
-      if (!n || !n.canAccept()) continue;
+    for (const go of this._trainingHuts) {
+      const th = go.getComponent(TrainingHut);
+      if (!th || !th.hasPendingRequest()) continue;
       const d = this._dist2(from, go);
       if (d < bestD) { best = go; bestD = d; }
     }

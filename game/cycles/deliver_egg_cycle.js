@@ -36,7 +36,7 @@ class PickupEggAction extends Action {
   }
 }
 
-// Deposit the egg at the nursery.
+// Deposit the egg at the training hut.
 class DepositEggAction extends Action {
   constructor(task, onSuccess, onFailure) {
     super('DepositEgg');
@@ -44,7 +44,7 @@ class DepositEggAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = DROP_DURATION;
-    this.preconditions = { atNursery: true, hasEgg: true };
+    this.preconditions = { atTrainingHut: true, hasEgg: true };
     this.effects       = { hasEgg: false, eggDelivered: true };
   }
   enter() { this._t = 0; }
@@ -54,7 +54,7 @@ class DepositEggAction extends Action {
       if (!this._task.dropOff()) {
         this._task.clear();
         this._onFailure?.();
-        agent.worldState.atNursery = false;
+        agent.worldState.atTrainingHut = false;
         agent.invalidate();
         return false;
       }
@@ -65,19 +65,19 @@ class DepositEggAction extends Action {
   }
 }
 
-// Build the egg-delivery cycle: GoToEgg → PickupEgg → GoToNursery → DepositEgg.
+// Build the egg-delivery cycle: GoToEgg → PickupEgg → GoToTrainingHut → DepositEgg.
 export function buildDeliverEggActions({ task, setCarrying, onCycleFail }) {
   return [
     new GoToAction('GoToEgg', () => task.egg,
       { hasEgg: false, atEgg: false, eggAvailable: true },
-      { atEgg: true, atHive: false, atNursery: false },
+      { atEgg: true, atHive: false, atTrainingHut: false },
       onCycleFail),
     new PickupEggAction(task,
       () => setCarrying('egg'),
       onCycleFail),
-    new GoToAction('GoToNursery', () => task.nursery,
-      { hasEgg: true, atNursery: false },
-      { atNursery: true, atEgg: false, atHive: false },
+    new GoToAction('GoToTrainingHut', () => task.trainingHut,
+      { hasEgg: true, atTrainingHut: false },
+      { atTrainingHut: true, atEgg: false, atHive: false },
       onCycleFail),
     new DepositEggAction(task,
       () => { setCarrying(null); task.clear(); },

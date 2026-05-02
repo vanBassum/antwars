@@ -79,7 +79,7 @@ export class Worker extends Component {
     agent.actions    = actions;
     agent.worldState = {
       hasResource: false, hasWater: false, hasSeed: false, hasEgg: false,
-      atResource: false, atHive: false, atFarm: false, atEgg: false, atNursery: false,
+      atResource: false, atHive: false, atFarm: false, atEgg: false, atTrainingHut: false,
       delivered: false, tended: false, seeded: false, eggDelivered: false,
       resourceAvailable: false, farmAvailable: false, seedAvailable: false, eggAvailable: false,
     };
@@ -136,8 +136,8 @@ export class Worker extends Component {
       this._egg.clear();
       agent.goal = TEND_GOAL;
     } else if (claim.kind === 'egg') {
-      this._egg.egg     = claim.target;
-      this._egg.nursery = claim.nursery;
+      this._egg.egg         = claim.target;
+      this._egg.trainingHut = claim.trainingHut;
       this._harvest.clear();
       this._tend.clear();
       this._seed.clear();
@@ -240,7 +240,7 @@ export class Worker extends Component {
     if (this._harvest.target)      target = this._harvest.target.name ?? 'resource';
     else if (this._tend.target)    target = this._tend.target.name    ?? 'farm';
     else if (this._seed.target)    target = this._seed.target.name    ?? 'farm';
-    else if (this._egg.egg)        target = 'egg → nursery';
+    else if (this._egg.egg)        target = 'egg → training hut';
 
     let carrying = 'empty';
     if (ws.hasResource && this._harvest.type) carrying = this._harvest.type;

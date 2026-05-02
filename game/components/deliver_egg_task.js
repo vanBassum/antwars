@@ -1,12 +1,12 @@
 import { EggPickup } from './egg_pickup.js';
-import { Nursery } from './nursery.js';
+import { TrainingHut } from './training_hut.js';
 
 // What an ant is currently delivering an egg to. Pure data holder; the
-// WorkManager assigns the egg target, and the nursery is resolved at pickup.
+// WorkManager assigns the egg target and the training hut destination.
 export class DeliverEggTask {
   constructor() {
-    this.egg     = null; // EggPickup-bearing gameObject (the loose egg)
-    this.nursery = null; // Nursery-bearing gameObject (delivery destination)
+    this.egg         = null; // EggPickup-bearing gameObject (the loose egg)
+    this.trainingHut = null; // TrainingHut-bearing gameObject (delivery destination)
   }
 
   hasTarget() { return !!this.egg; }
@@ -27,17 +27,16 @@ export class DeliverEggTask {
     return true;
   }
 
-  // Deliver the egg to the nursery. Returns true on success.
+  // Deliver the egg to the training hut. Returns true on success.
   dropOff() {
-    if (!this.nursery) return false;
-    const n = this.nursery.getComponent(Nursery);
-    if (!n) return false;
-    n.receiveEgg();
-    return true;
+    if (!this.trainingHut) return false;
+    const th = this.trainingHut.getComponent(TrainingHut);
+    if (!th) return false;
+    return th.receiveEgg();
   }
 
   clear() {
-    this.egg     = null;
-    this.nursery = null;
+    this.egg         = null;
+    this.trainingHut = null;
   }
 }
