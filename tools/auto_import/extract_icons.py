@@ -17,6 +17,7 @@ import re
 import sys
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -25,20 +26,55 @@ REFERENCE_DIR = PROJECT_ROOT / "assets" / "reference"
 ICONS_DIR = PROJECT_ROOT / "assets" / "icons"
 
 ICON_SIZE = 256
+BG_TOLERANCE = 28   # RGB-distance below this is fully background (alpha=0)
+BG_FEATHER   = 18   # soft cutoff width past tolerance — produces clean edges
 
 
 def camel_to_snake(s: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", s).lower()
 
 
+def remove_background(img: Image.Image,
+                      tolerance: int = BG_TOLERANCE,
+                      feather: int = BG_FEATHER) -> Image.Image:
+    """Remove the studio-render background by sampling corner pixels.
+
+    Pixels close to the corner-median color become transparent; pixels
+    further away stay opaque. A soft feather range produces anti-aliased
+    edges instead of a jagged binary cutout.
+    """
+    arr = np.array(img.convert("RGBA"), dtype=np.int32)
+    h, w = arr.shape[:2]
+
+    # Background color = median of the four corners (robust to one bad corner).
+    corners = np.array([arr[0, 0], arr[0, w - 1], arr[h - 1, 0], arr[h - 1, w - 1]])
+    bg = np.median(corners[:, :3], axis=0)
+
+    diff = arr[:, :, :3] - bg
+    dist = np.sqrt((diff ** 2).sum(axis=2))
+
+    # 0 at dist=tolerance, 255 at dist=tolerance+feather, clipped.
+    alpha = np.clip((dist - tolerance) * (255.0 / feather), 0, 255)
+    # Combine with any existing alpha (don't promote already-transparent pixels).
+    new_alpha = np.minimum(arr[:, :, 3], alpha).astype(np.uint8)
+
+    out = arr.astype(np.uint8)
+    out[:, :, 3] = new_alpha
+    return Image.fromarray(out, "RGBA")
+
+
 def extract_icon(ref_path: Path, name: str, out_dir: Path) -> Path:
-    """Crop front view from a 2x2 reference sheet, trim, resize, and save."""
+    """Crop front view from a 2x2 reference sheet, drop the background,
+    trim, square, resize, and save."""
     img = Image.open(ref_path).convert("RGBA")
     w, h = img.size
     # Front view is the top-left quadrant.
     front = img.crop((0, 0, w // 2, h // 2))
 
-    # Trim transparent padding.
+    # Now actually remove the background colour.
+    front = remove_background(front)
+
+    # Trim the transparent padding the bg-removal just introduced.
     bbox = front.getbbox()
     if bbox:
         front = front.crop(bbox)
