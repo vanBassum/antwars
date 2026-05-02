@@ -84,6 +84,25 @@
     }
     .context-menu-btn .btn-icon  { font-size: 18px; }
     .context-menu-btn .btn-label { font-weight: 500; }
+    .context-menu-picker {
+      display: flex; gap: 4px; padding: 4px 4px 2px;
+    }
+    .picker-btn {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; line-height: 1;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 4px; color: #fff;
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .picker-btn:hover { background: rgba(255, 255, 255, 0.16); }
+    .picker-btn.selected {
+      background: rgba(255, 255, 255, 0.28);
+      border-color: rgba(255, 255, 255, 0.65);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+    }
   </style>
 <script type="importmap">
   {

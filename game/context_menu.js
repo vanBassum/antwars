@@ -12,7 +12,8 @@ const UPDATE_MS = 200;
 //     title:    string,
 //     state:    string,                                       // optional
 //     progress: { label, value (0..1), text } | [{...}],      // optional, single or array
-//     actions:  [{ icon, label, selected?, onClick }],        // optional
+//     picker:   { options: [{ icon, label, selected, onClick }] }, // optional — compact icon-only toggle row
+//     actions:  [{ icon, label, selected?, onClick }],        // optional — full-width buttons
 //   }
 //
 // While the menu is open it polls getContextMenu every UPDATE_MS so live
@@ -152,6 +153,23 @@ export class ContextMenu {
         row.append(label, bar, text);
         this._menu.append(row);
       }
+    }
+    if (data.picker?.options?.length) {
+      const row = document.createElement('div');
+      row.className = 'context-menu-picker';
+      for (const opt of data.picker.options) {
+        const btn = document.createElement('button');
+        btn.className   = 'picker-btn' + (opt.selected ? ' selected' : '');
+        btn.title       = opt.label;
+        btn.textContent = opt.icon;
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          opt.onClick?.();
+          this._render();
+        });
+        row.append(btn);
+      }
+      this._menu.append(row);
     }
     if (data.actions?.length) {
       for (const action of data.actions) {

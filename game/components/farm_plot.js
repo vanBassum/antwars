@@ -136,12 +136,14 @@ export class FarmPlot extends Component {
       title: 'Farm Plot',
       state,
       progress,
-      actions: FARM_CROPS.map(c => ({
-        icon:     c.icon,
-        label:    c.label,
-        selected: this.crop === c.key,
-        onClick:  () => this.selectCrop(c.key),
-      })),
+      picker: {
+        options: FARM_CROPS.map(c => ({
+          icon:     c.icon,
+          label:    c.label,
+          selected: this.crop === c.key,
+          onClick:  () => this.selectCrop(c.key),
+        })),
+      },
     };
   }
 }
