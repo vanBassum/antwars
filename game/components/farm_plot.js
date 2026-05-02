@@ -35,17 +35,16 @@ const CROP_YIELDS = {
   tree:  'wood',
 };
 
-const GROW_STEPS      = 5;
-const MAX_WATERINGS   = GROW_STEPS;                                                // one watering per growth step
-const FULL_SCALE      = 0.85;                                                      // single-instance full size
-const STEP_RATIOS     = Array.from({ length: GROW_STEPS }, (_, i) => 0.2 + i * 0.2); // 0.2..1.0 (multiplied by per-instance base)
-const CROP_Y_OFFSET   = 0.15;                                                      // lift crop onto the plot surface
+const GROW_STEPS         = 5;
+const MAX_WATERINGS      = GROW_STEPS;       // one watering per growth step
+const FULL_SCALE         = 0.85;             // single-instance full size
+const MIN_VISIBLE_SCALE  = 0.2;              // relative scale at growth=0 (so crop is visible right after seed)
+const CROP_Y_OFFSET      = 0.15;             // lift crop onto the plot surface
 
-const PULSE_DURATION   = 0.4;   // plot scale pulse on water
-const BOINK_DURATION   = 0.3;   // crop mesh overshoot pulse on step-up
-const DECAY_RATE       = 0.05;  // water lost per second — paces when the next tend task is posted
-const REFILL_THRESHOLD = 0.5;
-const DARKEN_AT_DRY    = 0.45;
+const GROW_TICK_DURATION = 4.0;   // seconds for the plant to visibly grow one step after a watering
+const PULSE_DURATION     = 0.4;   // plot scale pulse on water
+const BOINK_DURATION     = 0.3;   // crop mesh overshoot pulse on watering
+const DARKEN_AT_DRY      = 0.45;  // plot tint when waterLevel = 0
 
 // Local XZ offsets for crop instances on the plot. Indexed by crop count.
 // 5-dot domino reads cleanly on a hex plot — centre + four corners.
@@ -73,19 +72,19 @@ const baseScaleFor = (count) => INSTANCE_BASE_SCALE[count] ?? FULL_SCALE / Math.
 export class FarmPlot extends Component {
   constructor() {
     super();
-    this._state       = FARM_STATE.IDLE;
-    this.crop         = null;
-    this.pendingCrop  = null;
-    this.growth       = 0;     // 0..1
-    this.waterLevel   = 1.0;   // 0..1, only matters while GROWING
+    this._state         = FARM_STATE.IDLE;
+    this.crop           = null;
+    this.pendingCrop    = null;
+    this.growth         = 0;     // 0..1, lerps toward _growthTarget after each watering
+    this._growthTarget  = 0;     // 0..1, set by water() to (waterings / MAX_WATERINGS)
+    this.waterLevel     = 1.0;   // 0..1, mirrors tick remaining while GROWING (1 just-watered, 0 done)
 
-    this._waterings   = 0;     // discrete tend visits required to fully grow
+    this._waterings     = 0;     // discrete tend visits required to fully grow
 
     // One entry per spawned crop instance. Each harvest pops the last entry
     // and removes its mesh; when the array empties we restart the cycle.
-    this._cropMeshes  = [];    // [{ mesh, baseScale }]
-    this._lastStep    = -1;
-    this._cropPulseT  = BOINK_DURATION;
+    this._cropMeshes    = [];    // [{ mesh, baseScale }]
+    this._cropPulseT    = BOINK_DURATION;
 
     this._waterPulseT = PULSE_DURATION;
     this._materials   = [];    // cloned per-instance for safe tinting
@@ -124,26 +123,30 @@ export class FarmPlot extends Component {
   }
 
   // Ant-facing — called when watering visit lands. Each successful watering
-  // bumps both the discrete waterings counter (which gates growth) and the
-  // continuous waterLevel buffer (which paces when the next tend task posts).
+  // bumps the discrete waterings counter and updates _growthTarget; growth
+  // itself lerps toward the target over GROW_TICK_DURATION (in update). The
+  // next watering is rejected until the previous tick has played out, so the
+  // visual order is water → wait → grow → next water.
   water() {
-    if (this._state !== FARM_STATE.GROWING)  return false;
-    if (this.waterLevel >= 0.99)             return false; // not thirsty yet
-    if (this._waterings >= MAX_WATERINGS)    return false; // already done
-    this.waterLevel  = 1.0;
-    this._waterings += 1;
-    this.growth      = Math.min(1, this._waterings / MAX_WATERINGS);
-    this._waterPulseT = 0;
-    if (this._waterings >= MAX_WATERINGS) this._setGrown();
+    if (this._state !== FARM_STATE.GROWING)        return false;
+    if (this._waterings >= MAX_WATERINGS)          return false; // already fully watered
+    if (this.growth < this._growthTarget - 1e-4)   return false; // previous tick still playing out
+    this._waterings   += 1;
+    this._growthTarget = Math.min(1, this._waterings / MAX_WATERINGS);
+    this.waterLevel    = 1.0;        // refilled — drains as the tick progresses
+    this._cropPulseT   = 0;          // crop boink on watering
+    this._waterPulseT  = 0;          // plot scale pulse
     return true;
   }
 
   // WorkManager queries.
   needsSeed()        { return this._state === FARM_STATE.AWAITING_SEED; }
   needsAttention()   {
+    // Ready for the next watering only after the previous tick has played out
+    // (growth has caught up to the per-watering target).
     return this._state === FARM_STATE.GROWING
-        && this.growth < 1
-        && this.waterLevel < REFILL_THRESHOLD;
+        && this._waterings < MAX_WATERINGS
+        && this.growth >= this._growthTarget - 1e-4;
   }
   isReadyToHarvest() {
     return this._state === FARM_STATE.GROWN && this._cropMeshes.length > 0;
@@ -186,24 +189,30 @@ export class FarmPlot extends Component {
 
   update(dt) {
     if (this._state === FARM_STATE.GROWING) {
-      // Decay only — growth advances discretely on each water() call now.
-      this.waterLevel = Math.max(0, this.waterLevel - DECAY_RATE * dt);
+      // Lerp growth toward the per-watering target. Each watering buys
+      // GROW_TICK_DURATION seconds of visible growth animation; waterLevel
+      // mirrors tick-remaining (1 just-watered → 0 done) so it doubles as
+      // the dry/wet visual signal AND the gating for the next tend task.
+      if (this.growth < this._growthTarget) {
+        const stepSize = 1 / MAX_WATERINGS;
+        const rate     = stepSize / GROW_TICK_DURATION;
+        this.growth    = Math.min(this._growthTarget, this.growth + rate * dt);
+        const remaining = this._growthTarget - this.growth;
+        this.waterLevel = Math.max(0, Math.min(1, remaining / stepSize));
+        if (this.growth >= 1 - 1e-6) this._setGrown();
+      } else {
+        this.waterLevel = 0; // tick complete — plot is dry, ready for next watering
+      }
     }
 
-    // Stepped crop scale + boink on step transitions. All instances share
-    // the same step (synced growth); each scales by its own per-instance base.
+    // Crop scale follows growth continuously. Boink overlays a brief pulse
+    // each time water() resets _cropPulseT.
     if (this._cropMeshes.length > 0) {
-      const step = this._currentStep();
-      const ratio = STEP_RATIOS[step];
-      if (step !== this._lastStep) {
-        this._cropPulseT = 0;
-        this._lastStep   = step;
-      }
-      let mul = ratio;
+      let mul = MIN_VISIBLE_SCALE + (1 - MIN_VISIBLE_SCALE) * this.growth;
       if (this._cropPulseT < BOINK_DURATION) {
         this._cropPulseT += dt;
         const p = Math.min(1, this._cropPulseT / BOINK_DURATION);
-        mul = ratio * (1 + 0.22 * Math.sin(p * Math.PI)); // overshoot+settle
+        mul *= 1 + 0.22 * Math.sin(p * Math.PI); // overshoot+settle
       }
       for (const entry of this._cropMeshes) {
         entry.mesh.scale.setScalar(entry.baseScale * mul);
@@ -231,34 +240,32 @@ export class FarmPlot extends Component {
     }
   }
 
-  _currentStep() {
-    if (this.growth >= 1) return GROW_STEPS - 1;
-    return Math.min(GROW_STEPS - 1, Math.floor(this.growth * GROW_STEPS));
-  }
-
   // ── State transitions ──────────────────────────────────────────────────
   _setIdle() {
-    this._state       = FARM_STATE.IDLE;
-    this.crop         = null;
-    this.pendingCrop  = null;
-    this.growth       = 0;
-    this.waterLevel   = 1.0;
-    this._waterings   = 0;
+    this._state         = FARM_STATE.IDLE;
+    this.crop           = null;
+    this.pendingCrop    = null;
+    this.growth         = 0;
+    this._growthTarget  = 0;
+    this.waterLevel     = 1.0;
+    this._waterings     = 0;
     this._removeCropMeshes();
   }
   _setAwaitingSeed(crop) {
-    this._state       = FARM_STATE.AWAITING_SEED;
-    this.crop         = crop;
-    this.pendingCrop  = null;
-    this.growth       = 0;
-    this.waterLevel   = 1.0;
-    this._waterings   = 0;
+    this._state         = FARM_STATE.AWAITING_SEED;
+    this.crop           = crop;
+    this.pendingCrop    = null;
+    this.growth         = 0;
+    this._growthTarget  = 0;
+    this.waterLevel     = 1.0;
+    this._waterings     = 0;
     this._removeCropMeshes();
   }
   _setGrowing() {
-    this._state     = FARM_STATE.GROWING;
-    this.growth     = 0;
-    this._waterings = 0;
+    this._state         = FARM_STATE.GROWING;
+    this.growth         = 0;
+    this._growthTarget  = 0;
+    this._waterings     = 0;
     // Start thirsty so the first tend task posts immediately and the player
     // sees the colony engage with the new plot right away.
     this.waterLevel = 0;
@@ -283,12 +290,11 @@ export class FarmPlot extends Component {
     for (const offset of layout) {
       let mesh;
       try { mesh = cloneModel(url); } catch { continue; } // model not loaded — silently skip this one
-      mesh.scale.setScalar(baseS * STEP_RATIOS[0]);
+      mesh.scale.setScalar(baseS * MIN_VISIBLE_SCALE);
       mesh.position.set(offset.x, CROP_Y_OFFSET, offset.z);
       this.gameObject.object3D.add(mesh);
       this._cropMeshes.push({ mesh, baseScale: baseS });
     }
-    this._lastStep   = 0;
     this._cropPulseT = 0; // boink on spawn
   }
 
@@ -297,7 +303,6 @@ export class FarmPlot extends Component {
       this.gameObject.object3D.remove(mesh);
     }
     this._cropMeshes = [];
-    this._lastStep   = -1;
   }
 
   getContextMenu() {
@@ -332,7 +337,7 @@ export class FarmPlot extends Component {
       progress.push({
         label: 'Water',
         value: this.waterLevel,
-        text:  this.waterLevel < REFILL_THRESHOLD ? 'thirsty' : 'wet',
+        text:  this.waterLevel > 0 ? 'growing…' : 'thirsty',
       });
     }
 
