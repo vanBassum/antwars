@@ -1,22 +1,27 @@
 import { Component } from '../../engine/gameobject.js';
 import { cloneModel } from '../../engine/model_cache.js';
 
+// `count` is how many crop instances spawn on the plot when it ripens —
+// each gets harvested individually for +1 yield, so a 5-count berry plot
+// produces 5 sugar over the full cycle.
 export const FARM_CROPS = [
-  { key: 'berry', icon: '🫐', iconUrl: 'assets/icons/BerryBush.png', label: 'Berry Bush' },
-  { key: 'tree',  icon: '🌳', iconUrl: 'assets/icons/Bush.png',      label: 'Tree' },
+  { key: 'berry', icon: '🫐', iconUrl: 'assets/icons/BerryBush.png', label: 'Berry Bush', count: 5 },
+  { key: 'tree',  icon: '🌳', iconUrl: 'assets/icons/Bush.png',      label: 'Tree',       count: 5 },
 ];
 
 // Lifecycle states. Other systems (WorkManager) react to these.
 export const FARM_STATE = {
   IDLE:           'idle',           // empty plot
   AWAITING_SEED:  'awaiting_seed',  // crop picked, no seed delivered yet
-  GROWING:        'growing',        // seed delivered, crop scaling up
-  GROWN:          'grown',          // full size, awaiting harvest (TBD)
+  GROWING:        'growing',        // seed delivered, crops scaling up
+  GROWN:          'grown',          // full size, awaiting harvest (one or more instances remain)
 };
 
-const cropName = (key) => FARM_CROPS.find(c => c.key === key)?.label ?? key;
+const cropDef   = (key) => FARM_CROPS.find(c => c.key === key);
+const cropName  = (key) => cropDef(key)?.label ?? key;
+const cropCount = (key) => cropDef(key)?.count ?? 1;
 
-// Crop visuals (separate child mesh on top of the plot).
+// Crop visuals (separate child meshes on top of the plot).
 const CROP_MODELS = {
   berry: 'assets/models/BerryBush.glb',
   tree:  'assets/models/Bush.glb',  // placeholder until a Tree.glb exists
@@ -32,9 +37,8 @@ const CROP_YIELDS = {
 
 const GROW_STEPS      = 5;
 const MAX_WATERINGS   = GROW_STEPS;                                                // one watering per growth step
-const FULL_SCALE      = 0.85;                                                      // trimmed so crop doesn't overflow the plot
-const STEP_SCALES     = Array.from({ length: GROW_STEPS }, (_, i) =>
-  FULL_SCALE * (0.2 + i * 0.2));                                                   // 0.17..0.85
+const FULL_SCALE      = 0.85;                                                      // single-instance full size
+const STEP_RATIOS     = Array.from({ length: GROW_STEPS }, (_, i) => 0.2 + i * 0.2); // 0.2..1.0 (multiplied by per-instance base)
 const CROP_Y_OFFSET   = 0.15;                                                      // lift crop onto the plot surface
 
 const PULSE_DURATION   = 0.4;   // plot scale pulse on water
@@ -42,6 +46,29 @@ const BOINK_DURATION   = 0.3;   // crop mesh overshoot pulse on step-up
 const DECAY_RATE       = 0.05;  // water lost per second — paces when the next tend task is posted
 const REFILL_THRESHOLD = 0.5;
 const DARKEN_AT_DRY    = 0.45;
+
+// Local XZ offsets for crop instances on the plot. Indexed by crop count.
+// 5-dot domino reads cleanly on a hex plot — centre + four corners.
+const INSTANCE_LAYOUTS = {
+  1: [{ x:  0.0,  z:  0.0  }],
+  5: [
+    { x:  0.0,  z:  0.0  },
+    { x:  0.32, z:  0.32 },
+    { x: -0.32, z:  0.32 },
+    { x:  0.32, z: -0.32 },
+    { x: -0.32, z: -0.32 },
+  ],
+};
+
+// Per-instance base scale at full growth. Multi-instance plots use a smaller
+// base so the crops sit alongside each other without overlap.
+const INSTANCE_BASE_SCALE = {
+  1: FULL_SCALE,
+  5: 0.45,
+};
+
+const layoutFor = (count) => INSTANCE_LAYOUTS[count] ?? INSTANCE_LAYOUTS[5].slice(0, count);
+const baseScaleFor = (count) => INSTANCE_BASE_SCALE[count] ?? FULL_SCALE / Math.sqrt(count);
 
 export class FarmPlot extends Component {
   constructor() {
@@ -54,7 +81,9 @@ export class FarmPlot extends Component {
 
     this._waterings   = 0;     // discrete tend visits required to fully grow
 
-    this._cropMesh    = null;  // separate child object3D for the crop visual
+    // One entry per spawned crop instance. Each harvest pops the last entry
+    // and removes its mesh; when the array empties we restart the cycle.
+    this._cropMeshes  = [];    // [{ mesh, baseScale }]
     this._lastStep    = -1;
     this._cropPulseT  = BOINK_DURATION;
 
@@ -81,7 +110,7 @@ export class FarmPlot extends Component {
         this.pendingCrop = newCrop === this.crop ? null : newCrop;
         break;
       case FARM_STATE.GROWN:
-        // Replace immediately, lose the ripe crop.
+        // Replace immediately, lose any remaining ripe crops.
         this._setAwaitingSeed(newCrop);
         break;
     }
@@ -116,17 +145,24 @@ export class FarmPlot extends Component {
         && this.growth < 1
         && this.waterLevel < REFILL_THRESHOLD;
   }
-  isReadyToHarvest() { return this._state === FARM_STATE.GROWN; }
+  isReadyToHarvest() {
+    return this._state === FARM_STATE.GROWN && this._cropMeshes.length > 0;
+  }
   yieldType()        { return CROP_YIELDS[this.crop] ?? null; }
 
-  // Ant-facing — called when a harvest visit lands. Yields one unit of the
-  // crop's mapped resource type and restarts the cycle (back to
-  // AWAITING_SEED with the same crop, or with the queued pendingCrop if one
-  // was set). Returns the amount taken (0 if not harvestable).
+  // Ant-facing — called when a harvest visit lands. Pops one crop instance
+  // and yields one unit of the crop's mapped resource type. When the last
+  // instance is taken, restarts the cycle (back to AWAITING_SEED with the
+  // same crop, or with the queued pendingCrop if one was set during
+  // growing). Returns the amount taken (0 if not harvestable).
   harvestOne() {
     if (!this.isReadyToHarvest()) return 0;
-    const next = this.pendingCrop ?? this.crop;
-    this._setAwaitingSeed(next);
+    const entry = this._cropMeshes.pop();
+    if (entry) this.gameObject.object3D.remove(entry.mesh);
+    if (this._cropMeshes.length === 0) {
+      const next = this.pendingCrop ?? this.crop;
+      this._setAwaitingSeed(next);
+    }
     return 1;
   }
 
@@ -145,7 +181,7 @@ export class FarmPlot extends Component {
   destroy() {
     for (const { mat } of this._materials) mat.dispose();
     this._materials = [];
-    this._removeCropMesh();
+    this._removeCropMeshes();
   }
 
   update(dt) {
@@ -154,21 +190,24 @@ export class FarmPlot extends Component {
       this.waterLevel = Math.max(0, this.waterLevel - DECAY_RATE * dt);
     }
 
-    // Stepped crop scale + boink on step transitions.
-    if (this._cropMesh) {
+    // Stepped crop scale + boink on step transitions. All instances share
+    // the same step (synced growth); each scales by its own per-instance base.
+    if (this._cropMeshes.length > 0) {
       const step = this._currentStep();
-      const target = STEP_SCALES[step];
+      const ratio = STEP_RATIOS[step];
       if (step !== this._lastStep) {
         this._cropPulseT = 0;
         this._lastStep   = step;
       }
-      let s = target;
+      let mul = ratio;
       if (this._cropPulseT < BOINK_DURATION) {
         this._cropPulseT += dt;
         const p = Math.min(1, this._cropPulseT / BOINK_DURATION);
-        s = target * (1 + 0.22 * Math.sin(p * Math.PI)); // overshoot+settle
+        mul = ratio * (1 + 0.22 * Math.sin(p * Math.PI)); // overshoot+settle
       }
-      this._cropMesh.scale.setScalar(s);
+      for (const entry of this._cropMeshes) {
+        entry.mesh.scale.setScalar(entry.baseScale * mul);
+      }
     }
 
     // Plot tint — only meaningful while GROWING; reset to base otherwise.
@@ -205,7 +244,7 @@ export class FarmPlot extends Component {
     this.growth       = 0;
     this.waterLevel   = 1.0;
     this._waterings   = 0;
-    this._removeCropMesh();
+    this._removeCropMeshes();
   }
   _setAwaitingSeed(crop) {
     this._state       = FARM_STATE.AWAITING_SEED;
@@ -214,7 +253,7 @@ export class FarmPlot extends Component {
     this.growth       = 0;
     this.waterLevel   = 1.0;
     this._waterings   = 0;
-    this._removeCropMesh();
+    this._removeCropMeshes();
   }
   _setGrowing() {
     this._state     = FARM_STATE.GROWING;
@@ -223,7 +262,7 @@ export class FarmPlot extends Component {
     // Start thirsty so the first tend task posts immediately and the player
     // sees the colony engage with the new plot right away.
     this.waterLevel = 0;
-    this._spawnCropMesh();
+    this._spawnCropMeshes();
   }
   _setGrown() {
     this._state = FARM_STATE.GROWN;
@@ -234,26 +273,31 @@ export class FarmPlot extends Component {
     }
   }
 
-  _spawnCropMesh() {
-    this._removeCropMesh();
+  _spawnCropMeshes() {
+    this._removeCropMeshes();
     const url = CROP_MODELS[this.crop];
     if (!url) return;
-    let mesh;
-    try { mesh = cloneModel(url); } catch { return; }
-    mesh.scale.setScalar(STEP_SCALES[0]);
-    mesh.position.y = CROP_Y_OFFSET;
-    this.gameObject.object3D.add(mesh);
-    this._cropMesh   = mesh;
+    const count  = cropCount(this.crop);
+    const layout = layoutFor(count);
+    const baseS  = baseScaleFor(count);
+    for (const offset of layout) {
+      let mesh;
+      try { mesh = cloneModel(url); } catch { continue; } // model not loaded — silently skip this one
+      mesh.scale.setScalar(baseS * STEP_RATIOS[0]);
+      mesh.position.set(offset.x, CROP_Y_OFFSET, offset.z);
+      this.gameObject.object3D.add(mesh);
+      this._cropMeshes.push({ mesh, baseScale: baseS });
+    }
     this._lastStep   = 0;
     this._cropPulseT = 0; // boink on spawn
   }
 
-  _removeCropMesh() {
-    if (this._cropMesh) {
-      this.gameObject.object3D.remove(this._cropMesh);
-      this._cropMesh = null;
+  _removeCropMeshes() {
+    for (const { mesh } of this._cropMeshes) {
+      this.gameObject.object3D.remove(mesh);
     }
-    this._lastStep = -1;
+    this._cropMeshes = [];
+    this._lastStep   = -1;
   }
 
   getContextMenu() {
@@ -268,8 +312,12 @@ export class FarmPlot extends Component {
           ? `Growing: ${cropName(this.crop)} → ${cropName(this.pendingCrop)}`
           : `Growing: ${cropName(this.crop)}`;
         break;
-      case FARM_STATE.GROWN:
-        stateText = `Ripe: ${cropName(this.crop)}`; break;
+      case FARM_STATE.GROWN: {
+        const total = cropCount(this.crop);
+        const left  = this._cropMeshes.length;
+        stateText = `Ripe: ${cropName(this.crop)} (${left} / ${total})`;
+        break;
+      }
     }
 
     const progress = [];
