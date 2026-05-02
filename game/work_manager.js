@@ -16,6 +16,10 @@ const EGG_CAP = 10;
 // tasks get prioritised more aggressively over nearer ones.
 const FAIRNESS_K = 0.3;
 
+// Player-requested tasks (egg delivery, future construction) get a score
+// divisor so they reliably beat ambient work (harvest/tend) at cycle boundaries.
+const PLAYER_TASK_BOOST = 10;
+
 // Central authority that hands out work. Tasks are derived from current
 // game state on demand (no separate task queue), so they can never go stale.
 //
@@ -52,6 +56,10 @@ export class WorkManager {
     this._farmPlots     = []; // gameObjects with a FarmPlot component
     this._looseEggs     = []; // gameObjects with an EggPickup component
     this._trainingHuts  = []; // gameObjects with a TrainingHut component
+
+    // Registered workers — workers add/remove themselves so we can preempt
+    // them without importing the Worker class (avoids circular deps).
+    this._workers = new Set();
 
     // Fairness: track when each (target, kind) first became eligible.
     // Key format: gameObject instance → Map<kind, timestampSeconds>.
@@ -206,6 +214,17 @@ export class WorkManager {
   }
   eggCapReached() { return this.totalEggs() >= EGG_CAP; }
 
+  // Workers self-register so we can preempt them without circular imports.
+  registerWorker(worker)   { this._workers.add(worker); }
+  unregisterWorker(worker) { this._workers.delete(worker); }
+
+  // Signal all workers to re-evaluate. Called when a player-driven task is
+  // queued (e.g. training request) so workers don't have to finish their
+  // current ambient cycle before noticing the new high-priority work.
+  preemptWorkers() {
+    for (const w of this._workers) w.preempt();
+  }
+
   _refreshCaches() {
     if (!this._dirty) return;
     this._resourceNodes = [];
@@ -222,12 +241,15 @@ export class WorkManager {
   }
 
   // Weighted score: distance² discounted by how long the task has been waiting.
+  // Player-requested kinds (egg) get an extra divisor so they reliably win.
   _fairScore(ant, target, kind, now) {
     const d2 = this._dist2(ant, target);
     const kinds = this._eligibleSince.get(target);
     const since = kinds?.get(kind) ?? now;
     const age = now - since;
-    return d2 / (1 + age * FAIRNESS_K);
+    let score = d2 / (1 + age * FAIRNESS_K);
+    if (kind === 'egg') score /= PLAYER_TASK_BOOST;
+    return score;
   }
 
   // Update the eligibility timestamps: record when targets first become valid,

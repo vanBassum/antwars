@@ -17,7 +17,13 @@ export class TrainingHut extends Component {
   get queueLength() { return this._queue; }
 
   // Player requests a new worker to be trained.
-  enqueue() { this._queue++; }
+  enqueue() {
+    this._queue++;
+    // Nudge workers so they re-evaluate immediately instead of finishing
+    // their current ambient cycle first (fixes training-queue starvation).
+    const wm = this.gameObject.game?.workManager;
+    if (wm) wm.preemptWorkers();
+  }
 
   // Does this hut have pending requests waiting for an egg?
   hasPendingRequest() { return this._queue > 0; }

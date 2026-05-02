@@ -96,6 +96,7 @@ export class Worker extends Component {
       this._pickNextCycle();
     };
 
+    this._wm.registerWorker(this);
     this._refreshAvailability();
     this._pickNextCycle();
   }
@@ -225,8 +226,22 @@ export class Worker extends Component {
     }
   }
 
+  // Called by WorkManager when a player-driven task is queued. If this
+  // worker isn't carrying a gathered resource, abandon the current ambient
+  // cycle and re-request so the boosted egg task can win.
+  preempt() {
+    const agent = this.gameObject.getComponent(GOAPAgent);
+    if (!agent) return;
+    // Don't interrupt if carrying a gathered resource — let it deposit first.
+    if (agent.worldState.hasResource) return;
+    // Don't interrupt if already on an egg delivery.
+    if (this._egg.hasTarget()) return;
+    this._abandonCycle();
+  }
+
   destroy() {
     this._releaseClaim();
+    this._wm?.unregisterWorker(this);
   }
 
   // ── Hooks for other systems ────────────────────────────────────────────
