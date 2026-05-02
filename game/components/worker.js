@@ -18,10 +18,11 @@ const WANDER_RADIUS  = 3;
 //   baseX    — X rotation applied first (used to lay the branch flat)
 //   tiltMax  — max ± tilt around Z (radians); a small per-pickup random
 //   heading  — Y-rotation range (radians); 2π = pointing any horizontal way
+//   offsetZ  — local-Z shift applied to the model; negative = toward the back
 const CARRY_CONFIGS = {
-  sugar: { url: 'assets/models/SugarBlob.glb',    baseX: 0,           tiltMax: 0.3, heading: Math.PI * 2 },
-  wood:  { url: 'assets/models/Branch.glb',       baseX: Math.PI / 2, tiltMax: 0.4, heading: Math.PI * 2 },
-  water: { url: 'assets/models/WaterDroplet.glb', baseX: 0,           tiltMax: 0.2, heading: Math.PI * 2 },
+  sugar: { url: 'assets/models/SugarBlob.glb',    baseX: 0,           tiltMax: 0.3, heading: Math.PI * 2, offsetZ:  0    },
+  wood:  { url: 'assets/models/Branch.glb',       baseX: Math.PI / 2, tiltMax: 0.4, heading: Math.PI * 2, offsetZ: -0.35 },
+  water: { url: 'assets/models/WaterDroplet.glb', baseX: 0,           tiltMax: 0.2, heading: Math.PI * 2, offsetZ:  0    },
 };
 
 // Build a Catmull-Rom-smoothed waypoint list along a hex path.
@@ -485,7 +486,7 @@ export class Worker extends Component {
     let blob;
     try { blob = cloneModel(cfg.url); } catch { return; } // model not loaded — silently skip
     blob.scale.setScalar(0.25);
-    blob.position.y = 0.3;
+    blob.position.set(0, 0.3, cfg.offsetZ ?? 0);
     blob.rotation.set(
       cfg.baseX,
       Math.random() * cfg.heading,
