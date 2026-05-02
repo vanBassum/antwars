@@ -5,6 +5,7 @@ export class Game {
   constructor({ container = document.body } = {}) {
     this.gameObjects     = [];
     this._lastTime       = 0;
+    this.elapsed         = 0;  // cumulative game time in seconds
     this.camera          = null;
     this._container      = container;
     this._sceneListeners = new Set();
@@ -85,6 +86,7 @@ export class Game {
   _tick(time) {
     const dt = Math.min((time - this._lastTime) / 1000, 0.1);
     this._lastTime = time;
+    this.elapsed += dt;
     for (const go of this.gameObjects) go.update(dt);
     this.onTick?.(dt);
     if (this.camera) this.renderer.render(this.scene, this.camera);
