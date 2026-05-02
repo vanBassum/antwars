@@ -22,7 +22,7 @@ export class Game {
   }
 
   _notifySceneChange() {
-    this._notifySceneChange();
+    this.onSceneChange?.();
     for (const fn of this._sceneListeners) fn();
   }
 
