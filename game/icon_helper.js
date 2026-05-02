@@ -15,6 +15,7 @@ export function makeIcon(icon, iconUrl, className) {
     img.src       = iconUrl;
     img.alt       = icon;          // emoji as alt text
     img.draggable = false;
+    img.style.pointerEvents = 'none'; // let the parent button own all pointer events
     return img;
   }
   const span = document.createElement('span');
