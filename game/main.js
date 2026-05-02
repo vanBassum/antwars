@@ -15,6 +15,7 @@ import { ContextMenu } from './context_menu.js';
 import { WorkManager } from './work_manager.js';
 import { DebugMode } from './debug.js';
 import { DebugOverlay } from './debug_overlay.js';
+import { PerfOverlay } from './perf_overlay.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -80,7 +81,8 @@ new ContextMenu(game, { isBlocked: () => placement.active });
 
 // Per-frame debug labels above any gameObject exposing getDebugInfo().
 const debugOverlay = new DebugOverlay(game, game.debug);
-game.onTick = () => debugOverlay.tick();
+const perfOverlay  = new PerfOverlay(game);
+game.onTick = () => { debugOverlay.tick(); perfOverlay.tick(); };
 
 function startPlacement(defId, commit) {
   const def = ENTITY_DEFS.find(d => d.id === defId);

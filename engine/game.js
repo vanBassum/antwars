@@ -87,8 +87,21 @@ export class Game {
     const dt = Math.min((time - this._lastTime) / 1000, 0.1);
     this._lastTime = time;
     this.elapsed += dt;
+
+    const t0 = performance.now();
     for (const go of this.gameObjects) go.update(dt);
+    const t1 = performance.now();
     this.onTick?.(dt);
+    const t2 = performance.now();
     if (this.camera) this.renderer.render(this.scene, this.camera);
+    const t3 = performance.now();
+
+    // Expose per-frame subsystem timings (ms) for perf overlay
+    this.frameTiming = {
+      update: t1 - t0,
+      logic:  t2 - t1,
+      render: t3 - t2,
+      total:  t3 - t0,
+    };
   }
 }
