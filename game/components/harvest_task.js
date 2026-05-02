@@ -10,6 +10,14 @@ export class HarvestTask {
 
   hasTarget() { return !!this.target; }
 
+  // Is the assigned target still a valid harvest source?
+  isStillValid() {
+    if (!this.target) return false;
+    if (!this.target.game?.gameObjects.includes(this.target)) return false;
+    const rn = this.target.getComponent(ResourceNode);
+    return !!rn && !rn.isEmpty;
+  }
+
   // Decrement one unit from the chosen node. Returns the amount actually
   // taken (0 if the node is gone or already empty).
   take() {

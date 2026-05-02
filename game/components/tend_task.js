@@ -9,6 +9,14 @@ export class TendTask {
 
   hasTarget() { return !!this.target; }
 
+  // Is the assigned farm still in a state that wants watering?
+  isStillValid() {
+    if (!this.target) return false;
+    if (!this.target.game?.gameObjects.includes(this.target)) return false;
+    const fp = this.target.getComponent(FarmPlot);
+    return !!fp && fp.needsAttention();
+  }
+
   // Apply one watering to the picked farm. Returns true on success.
   water() { return this.target?.getComponent(FarmPlot)?.water() ?? false; }
 

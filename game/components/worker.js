@@ -42,16 +42,23 @@ function smoothPath(grid, fromPos, hexPath, finalEdge = null) {
 }
 
 class GoToAction extends Action {
-  constructor(name, getTargetGO, preconditions, effects) {
+  constructor(name, getTargetGO, preconditions, effects, onFailure = null) {
     super(name);
     this._getTarget    = getTargetGO;
+    this._onFailure    = onFailure;
     this.preconditions = preconditions;
     this.effects       = effects;
   }
+  // If we can't actually go to the target (no target object, no walkable
+  // approach, or no path), bail to onFailure so the worker can re-pick.
+  // Returning silently with mover.arrived=true would let GOAP apply the
+  // action's effects (atX=true) on a trip that didn't actually happen,
+  // which is what produces stuck ants.
   enter(agent) {
+    this._failed = false;
     const target = this._getTarget();
     const mover  = agent.gameObject.getComponent(Mover);
-    if (!target) { mover.arrived = true; return; }
+    if (!target) { this._fail(agent, mover); return; }
 
     const grid = agent.gameObject.game.hexGrid;
     if (!grid) { mover.moveTo(target.object3D.position); return; }
@@ -65,7 +72,7 @@ class GoToAction extends Action {
       goal = to;
     } else {
       const approach = grid.findApproachHex(to.q, to.r, from.q, from.r);
-      if (!approach) { mover.arrived = true; return; }
+      if (!approach) { this._fail(agent, mover); return; }
       goal = approach;
       const tWP = grid.hexToWorld(to.q, to.r);
       const aWP = grid.hexToWorld(approach.q, approach.r);
@@ -73,11 +80,18 @@ class GoToAction extends Action {
     }
 
     const path = grid.findPath(from.q, from.r, goal.q, goal.r);
-    if (!path) { mover.arrived = true; return; }
+    if (!path) { this._fail(agent, mover); return; }
     mover.moveAlong(smoothPath(grid, ant.position, path, edgeOverride));
   }
   perform(agent, _dt) {
+    if (this._failed) return false; // never let a failed action complete
     return agent.gameObject.getComponent(Mover).arrived;
+  }
+  _fail(agent, mover) {
+    this._failed = true;
+    mover.arrived = true;
+    this._onFailure?.();
+    agent.invalidate();
   }
 }
 
@@ -128,7 +142,9 @@ class CollectResourceAction extends Action {
 
     if (this._t >= this._duration) {
       if (this._task.take() === 0) {
+        this._task.clear();
         this._onFailure?.();
+        agent.worldState.atResource = false;
         agent.invalidate();
         return false;
       }
@@ -159,6 +175,7 @@ class WaterFarmAction extends Action {
     this._t += dt;
     if (this._t >= this._duration) {
       if (!this._task.water()) {
+        this._task.clear();
         this._onFailure?.();
         agent.worldState.atFarm = false;
         agent.invalidate();
@@ -188,6 +205,7 @@ class DropSeedAction extends Action {
     this._t += dt;
     if (this._t >= this._duration) {
       if (!this._task.deliver()) {
+        this._task.clear();
         this._onFailure?.();
         agent.worldState.atFarm = false;
         agent.invalidate();
@@ -220,22 +238,29 @@ export class Worker extends Component {
     this._wanderTimer = null;
 
     const setCarrying = (type) => this._setCarrying(type);
-    const onCycleFail = () => this._releaseClaim();
+    // Any failure mid-cycle: clear everything cleanly and re-pick. This is
+    // what prevents stuck ants — without it the planner would re-plan the
+    // same dead target on the next tick.
+    const onCycleFail = () => this._abandonCycle();
 
     const actions = [
       // Harvest cycle
       new GoToAction('GoToHarvest', () => this._harvest.target,
         { hasResource: false, atResource: false, resourceAvailable: true },
-        { atResource: true,   atHive: false, atFarm: false }),
+        { atResource: true,   atHive: false, atFarm: false },
+        onCycleFail),
       new CollectResourceAction(this._harvest,
         () => setCarrying(this._harvest.type),
         onCycleFail,
         { atResource: true, hasResource: false, resourceAvailable: true },
         { hasResource: true }),
-      // Shared travel: GoToHive — open precondition so both cycles can use it
+      // Shared travel: GoToHive — open precondition so both cycles can use it.
+      // Hive is a fixed entity; failure here means something catastrophic
+      // (no hive at all), so abandon cleanly instead of looping.
       new GoToAction('GoToHive', hiveGO,
         { atHive: false },
-        { atHive: true, atResource: false, atFarm: false }),
+        { atHive: true, atResource: false, atFarm: false },
+        onCycleFail),
       new WaitAction('Deposit', 0.3,
         { atHive: true, hasResource: true },
         { hasResource: false, delivered: true },
@@ -251,7 +276,8 @@ export class Worker extends Component {
         () => setCarrying('water')),
       new GoToAction('GoToFarmForWater', () => this._tend.target,
         { atFarm: false, hasWater: true, farmAvailable: true },
-        { atFarm: true, atResource: false, atHive: false }),
+        { atFarm: true, atResource: false, atHive: false },
+        onCycleFail),
       new WaterFarmAction(this._tend,
         () => { setCarrying(null); this._tend.clear(); },
         onCycleFail,
@@ -264,7 +290,8 @@ export class Worker extends Component {
         () => setCarrying('seed')),
       new GoToAction('GoToFarmForSeed', () => this._seed.target,
         { atFarm: false, hasSeed: true, seedAvailable: true },
-        { atFarm: true, atResource: false, atHive: false }),
+        { atFarm: true, atResource: false, atHive: false },
+        onCycleFail),
       new DropSeedAction(this._seed,
         () => { setCarrying(null); this._seed.clear(); },
         onCycleFail,
@@ -342,6 +369,31 @@ export class Worker extends Component {
     if (this._wm) this._wm.release(this.gameObject);
   }
 
+  // Walk away from the current task cleanly. If we're carrying a gathered
+  // resource (sugar/wood), don't waste it — the carry-shortcut in
+  // _pickNextCycle will route us to the hive to deposit before anything
+  // else. Logistical cargo (water/seed) is dropped: it's free to refetch.
+  _abandonCycle() {
+    const agent = this.gameObject.getComponent(GOAPAgent);
+    if (!agent) return;
+    this._releaseClaim();
+    // The harvest source is gone, but if we already have its product the
+    // Deposit step still needs harvest.type to credit the right resource.
+    this._harvest.target = null;
+    if (!agent.worldState.hasResource) this._harvest.type = null;
+    this._tend.clear();
+    this._seed.clear();
+    if (!agent.worldState.hasResource) {
+      // Empty hands (or only water/seed) — drop logistical cargo so the
+      // visual matches state and we go fully idle.
+      agent.worldState.hasWater = false;
+      agent.worldState.hasSeed  = false;
+      this._setCarrying(null);
+    }
+    agent.invalidate();
+    this._pickNextCycle();
+  }
+
   _refreshAvailability() {
     const agent = this.gameObject.getComponent(GOAPAgent);
     if (!agent) return;
@@ -368,15 +420,15 @@ export class Worker extends Component {
     const agent = this.gameObject.getComponent(GOAPAgent);
     if (!agent) return;
 
-    // If our claim was silently invalidated (e.g. another ant finished the
-    // last unit, or the farm got watered before we arrived), drop it and
-    // force a fresh pick so we don't loop.
-    if (this._wm && this._wm.claimOf(this.gameObject) && !this._wm.isValid(this.gameObject)) {
-      this._releaseClaim();
-      this._harvest.clear();
-      this._tend.clear();
-      agent.invalidate();
-      this._pickNextCycle();
+    // Per-task validity sweep. If our active task target became unworkable
+    // (resource depleted by another ant, farm watered/seeded already, target
+    // entity removed), abandon the cycle. _abandonCycle honors the carry
+    // state — if we're holding a gathered resource, we'll still go deposit
+    // it before going idle.
+    if ((this._harvest.hasTarget() && !this._harvest.isStillValid()) ||
+        (this._tend.hasTarget()    && !this._tend.isStillValid())    ||
+        (this._seed.hasTarget()    && !this._seed.isStillValid())) {
+      this._abandonCycle();
     }
 
     // Idle wander when GOAP has nothing to execute.

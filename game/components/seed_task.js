@@ -9,6 +9,14 @@ export class SeedTask {
 
   hasTarget() { return !!this.target; }
 
+  // Is the assigned farm still awaiting a seed?
+  isStillValid() {
+    if (!this.target) return false;
+    if (!this.target.game?.gameObjects.includes(this.target)) return false;
+    const fp = this.target.getComponent(FarmPlot);
+    return !!fp && fp.needsSeed();
+  }
+
   // Hand the seed to the farm — transitions it from AWAITING_SEED to
   // GROWING. Returns true on success.
   deliver() {
