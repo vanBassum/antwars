@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Worker } from './components/worker.js';
 
 // Reusable click-to-place mode. Call start(def, onCommit) to enter placement
 // for a given EntityDef; the controller renders a ghost preview that snaps to
@@ -54,6 +55,17 @@ export class PlacementController {
     this._ghost = go;
   }
 
+  _canPlaceAt(hex) {
+    if (!this._game.hexGrid.isWalkable(hex.q, hex.r)) return false;
+    const grid = this._game.hexGrid;
+    for (const go of this._game.gameObjects) {
+      if (!go.getComponent(Worker)) continue;
+      const h = grid.worldToHex(go.position.x, go.position.z);
+      if (h.q === hex.q && h.r === hex.r) return false;
+    }
+    return true;
+  }
+
   _setGhostTint(valid) {
     const color = valid ? 0xffffff : 0xff6666;
     for (const m of this._ghostMats) m.color?.setHex(color);
@@ -67,7 +79,7 @@ export class PlacementController {
       return;
     }
     const wp    = this._game.hexGrid.hexToWorld(hex.q, hex.r);
-    const valid = this._game.hexGrid.isWalkable(hex.q, hex.r);
+    const valid = this._canPlaceAt(hex);
     this._ghost.object3D.position.set(wp.x, 0, wp.z);
     this._ghost.object3D.visible = true;
     this._setGhostTint(valid);
@@ -78,7 +90,7 @@ export class PlacementController {
     const hex = this._raycastToHex(e);
     if (!hex) return;
     const grid = this._game.hexGrid;
-    if (!grid.isWalkable(hex.q, hex.r)) return;
+    if (!this._canPlaceAt(hex)) return;
 
     // stopImmediate so other listeners on the canvas (e.g. ContextMenu) don't
     // also act on this same click.
