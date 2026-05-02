@@ -5,7 +5,36 @@
   <title>Armymen RTS</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; }
+    body { background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+    .resource-bar {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 16px; padding: 8px 14px;
+      background: rgba(0, 0, 0, 0.55); border-radius: 8px;
+      color: #fff; font-size: 16px; z-index: 1000; pointer-events: none;
+      backdrop-filter: blur(6px);
+    }
+    .resource-item  { display: flex; align-items: center; gap: 6px; }
+    .resource-icon  { font-size: 20px; }
+    .resource-count { font-weight: 600; min-width: 30px; text-align: right; }
+    .action-bar {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 8px; z-index: 1000;
+    }
+    .action-btn {
+      width: 64px; height: 64px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 2px;
+      background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px; color: #fff;
+      font-size: 11px; cursor: pointer; backdrop-filter: blur(6px);
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .action-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.4);
+    }
+    .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .action-btn .action-icon { font-size: 28px; line-height: 1; }
+    .action-btn .action-cost { font-size: 11px; opacity: 0.85; }
   </style>
 <script type="importmap">
   {

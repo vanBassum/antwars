@@ -1,0 +1,1 @@
+{"v":1,"terrain":{"seed":42,"width":128,"depth":128,"heightScale":0,"flat":true,"water":false},"entities":[{"id":"anthill","p":[0,0,0],"hd":0,"player":1},{"id":"watchtower","p":[8,0,0],"hd":0,"player":1},{"id":"sugar_node","p":[-6,0,6],"hd":0,"player":0},{"id":"bush","p":[6,0,6],"hd":0,"player":0},{"id":"ant","p":[0,0,1],"hd":0,"player":1}]}

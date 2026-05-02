@@ -16,11 +16,12 @@ const TYPE_COLOR = {
 };
 
 export class TerrainRenderer extends Component {
-  constructor(map, { cellSize = 1, heightScale = 10 } = {}) {
+  constructor(map, { cellSize = 1, heightScale = 10, water = true } = {}) {
     super();
     this._map         = map;
     this._cellSize    = cellSize;
     this._heightScale = heightScale;
+    this._water       = water;
   }
 
   start() {
@@ -71,12 +72,14 @@ export class TerrainRenderer extends Component {
     this.gameObject.object3D.add(mesh);
 
     // ── Water plane ───────────────────────────────────────────────────────────
-    const size      = width * cs;
-    const waterMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
-      new THREE.MeshLambertMaterial({ color: 0x3a72b0, transparent: true, opacity: 0.72 })
-    );
-    waterMesh.position.y = WATER_H * hs;
-    this.gameObject.object3D.add(waterMesh);
+    if (this._water) {
+      const size      = width * cs;
+      const waterMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
+        new THREE.MeshLambertMaterial({ color: 0x3a72b0, transparent: true, opacity: 0.72 })
+      );
+      waterMesh.position.y = WATER_H * hs;
+      this.gameObject.object3D.add(waterMesh);
+    }
   }
 }

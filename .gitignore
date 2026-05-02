@@ -3,3 +3,9 @@ node_modules/
 *.local
 .DS_Store
 Thumbs.db
+
+# Local Claude worktrees (per-session scratch repos)
+.claude/worktrees/
+
+# Reference sheets used to generate models — large, regeneratable inputs
+assets/reference/
