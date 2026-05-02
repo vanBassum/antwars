@@ -23,6 +23,7 @@ const CROP_MODELS = {
 };
 
 const GROW_STEPS      = 5;
+const MAX_WATERINGS   = GROW_STEPS;                                                // one watering per growth step
 const FULL_SCALE      = 0.85;                                                      // trimmed so crop doesn't overflow the plot
 const STEP_SCALES     = Array.from({ length: GROW_STEPS }, (_, i) =>
   FULL_SCALE * (0.2 + i * 0.2));                                                   // 0.17..0.85
@@ -30,8 +31,7 @@ const CROP_Y_OFFSET   = 0.15;                                                   
 
 const PULSE_DURATION   = 0.4;   // plot scale pulse on water
 const BOINK_DURATION   = 0.3;   // crop mesh overshoot pulse on step-up
-const DECAY_RATE       = 0.05;  // water lost per second while GROWING
-const GROW_RATE        = 0.02;  // growth per second while GROWING + watered
+const DECAY_RATE       = 0.05;  // water lost per second — paces when the next tend task is posted
 const REFILL_THRESHOLD = 0.5;
 const DARKEN_AT_DRY    = 0.45;
 
@@ -43,6 +43,8 @@ export class FarmPlot extends Component {
     this.pendingCrop  = null;
     this.growth       = 0;     // 0..1
     this.waterLevel   = 1.0;   // 0..1, only matters while GROWING
+
+    this._waterings   = 0;     // discrete tend visits required to fully grow
 
     this._cropMesh    = null;  // separate child object3D for the crop visual
     this._lastStep    = -1;
@@ -84,12 +86,18 @@ export class FarmPlot extends Component {
     return true;
   }
 
-  // Ant-facing — called when watering visit lands.
+  // Ant-facing — called when watering visit lands. Each successful watering
+  // bumps both the discrete waterings counter (which gates growth) and the
+  // continuous waterLevel buffer (which paces when the next tend task posts).
   water() {
     if (this._state !== FARM_STATE.GROWING)  return false;
-    if (this.waterLevel >= 0.99)             return false;
+    if (this.waterLevel >= 0.99)             return false; // not thirsty yet
+    if (this._waterings >= MAX_WATERINGS)    return false; // already done
     this.waterLevel  = 1.0;
+    this._waterings += 1;
+    this.growth      = Math.min(1, this._waterings / MAX_WATERINGS);
     this._waterPulseT = 0;
+    if (this._waterings >= MAX_WATERINGS) this._setGrown();
     return true;
   }
 
@@ -121,11 +129,8 @@ export class FarmPlot extends Component {
 
   update(dt) {
     if (this._state === FARM_STATE.GROWING) {
+      // Decay only — growth advances discretely on each water() call now.
       this.waterLevel = Math.max(0, this.waterLevel - DECAY_RATE * dt);
-      if (this.waterLevel > 0 && this.growth < 1) {
-        this.growth = Math.min(1, this.growth + GROW_RATE * dt);
-        if (this.growth >= 1) this._setGrown();
-      }
     }
 
     // Stepped crop scale + boink on step transitions.
@@ -178,6 +183,7 @@ export class FarmPlot extends Component {
     this.pendingCrop  = null;
     this.growth       = 0;
     this.waterLevel   = 1.0;
+    this._waterings   = 0;
     this._removeCropMesh();
   }
   _setAwaitingSeed(crop) {
@@ -186,12 +192,16 @@ export class FarmPlot extends Component {
     this.pendingCrop  = null;
     this.growth       = 0;
     this.waterLevel   = 1.0;
+    this._waterings   = 0;
     this._removeCropMesh();
   }
   _setGrowing() {
     this._state     = FARM_STATE.GROWING;
     this.growth     = 0;
-    this.waterLevel = 1.0;
+    this._waterings = 0;
+    // Start thirsty so the first tend task posts immediately and the player
+    // sees the colony engage with the new plot right away.
+    this.waterLevel = 0;
     this._spawnCropMesh();
   }
   _setGrown() {
@@ -246,14 +256,14 @@ export class FarmPlot extends Component {
       progress.push({
         label: 'Growth',
         value: this.growth,
-        text:  `${Math.round(this.growth * 100)}%`,
+        text:  `${this._waterings} / ${MAX_WATERINGS} watered`,
       });
     }
     if (this._state === FARM_STATE.GROWING) {
       progress.push({
         label: 'Water',
         value: this.waterLevel,
-        text:  this.waterLevel < REFILL_THRESHOLD ? 'thirsty' : `${Math.round(this.waterLevel * 100)}%`,
+        text:  this.waterLevel < REFILL_THRESHOLD ? 'thirsty' : 'wet',
       });
     }
 
