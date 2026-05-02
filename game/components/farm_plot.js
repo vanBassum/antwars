@@ -22,8 +22,11 @@ const CROP_MODELS = {
   tree:  'assets/models/Bush.glb',  // placeholder until a Tree.glb exists
 };
 
-const GROW_STEPS  = 5;
-const STEP_SCALES = Array.from({ length: GROW_STEPS }, (_, i) => 0.2 + i * 0.2); // 0.2..1.0
+const GROW_STEPS      = 5;
+const FULL_SCALE      = 0.85;                                                      // trimmed so crop doesn't overflow the plot
+const STEP_SCALES     = Array.from({ length: GROW_STEPS }, (_, i) =>
+  FULL_SCALE * (0.2 + i * 0.2));                                                   // 0.17..0.85
+const CROP_Y_OFFSET   = 0.15;                                                      // lift crop onto the plot surface
 
 const PULSE_DURATION   = 0.4;   // plot scale pulse on water
 const BOINK_DURATION   = 0.3;   // crop mesh overshoot pulse on step-up
@@ -207,6 +210,7 @@ export class FarmPlot extends Component {
     let mesh;
     try { mesh = cloneModel(url); } catch { return; }
     mesh.scale.setScalar(STEP_SCALES[0]);
+    mesh.position.y = CROP_Y_OFFSET;
     this.gameObject.object3D.add(mesh);
     this._cropMesh   = mesh;
     this._lastStep   = 0;
