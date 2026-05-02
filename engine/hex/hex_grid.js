@@ -119,6 +119,21 @@ export class HexGrid {
 
   // ── A* pathfinding (returns array of {q, r} including start) ─────────────
   findPath(sq, sr, gq, gr) {
+    // Defensive escape clause: if the start lands on an occupied no-entrance
+    // hex (happens when world-to-hex rounding lands on the building side of
+    // an edge midpoint — e.g. an ant parked at the boundary between a sugar
+    // node and its approach hex), snap the start to the nearest walkable
+    // neighbor closest to the goal. Without this, units accidentally inside
+    // a building would fail every A* call (canTraverse blocks all outgoing
+    // edges) and would stand still forever — see issue #17.
+    //
+    // Hives are NOT affected: they have an entrance, so canTraverse already
+    // permits the right exit and we don't snap away from them.
+    if (this.isOccupied(sq, sr) && !this.getEntrance(sq, sr)) {
+      const escape = this.findApproachHex(sq, sr, gq, gr);
+      if (escape) { sq = escape.q; sr = escape.r; }
+    }
+
     const open   = new Map();   // key → node
     const closed = new Set();
     const startK = this._key(sq, sr);
