@@ -37,7 +37,10 @@ export class Queen extends Component {
     // ── Lay egg ─────────────────────────────────────────────────────────
     this._eggTimer -= dt;
     if (this._eggTimer <= 0) {
-      this._layEgg();
+      const wm = this.gameObject.game.workManager;
+      if (!wm || !wm.eggCapReached()) {
+        this._layEgg();
+      }
       this._eggTimer = randRange(EGG_MIN, EGG_MAX);
     }
   }

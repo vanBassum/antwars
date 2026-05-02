@@ -8,10 +8,12 @@ import { cloneModel } from '../../engine/model_cache.js';
 import { HarvestTask } from './harvest_task.js';
 import { TendTask } from './tend_task.js';
 import { SeedTask } from './seed_task.js';
+import { DeliverEggTask } from './deliver_egg_task.js';
 
 import { buildHarvestActions, HARVEST_GOAL } from '../cycles/harvest_cycle.js';
 import { buildTendActions,    TEND_GOAL    } from '../cycles/tend_cycle.js';
 import { buildSeedActions,    SEED_GOAL    } from '../cycles/seed_cycle.js';
+import { buildDeliverEggActions, DELIVER_EGG_GOAL } from '../cycles/deliver_egg_cycle.js';
 
 const WANDER_RADIUS = 3;
 
@@ -26,6 +28,7 @@ const CARRY_CONFIGS = {
   wood:  { url: 'assets/models/Branch.glb',       baseX: Math.PI / 2, tiltMax: 0.4, heading: Math.PI * 2, offsetZ: -0.35 },
   water: { url: 'assets/models/WaterDroplet.glb', baseX: 0,           tiltMax: 0.2, heading: Math.PI * 2, offsetZ:  0    },
   seed:  { url: 'assets/models/Seed.glb',         baseX: Math.PI / 2, tiltMax: 0.2, heading: 0,           offsetZ: -0.35 },
+  egg:   { url: 'assets/models/Egg.glb',          baseX: 0,           tiltMax: 0.2, heading: Math.PI * 2, offsetZ:  0    },
 };
 
 // Worker composes three GOAP cycles (harvest / tend / seed) plus a shared
@@ -46,6 +49,7 @@ export class Worker extends Component {
     this._harvest = new HarvestTask();
     this._tend    = new TendTask();
     this._seed    = new SeedTask();
+    this._egg     = new DeliverEggTask();
     this._blob    = null;
     this._wanderTimer = null;
 
@@ -68,20 +72,22 @@ export class Worker extends Component {
       ...buildHarvestActions({ task: this._harvest, setCarrying, onCycleFail, creditDeposit }),
       ...buildTendActions   ({ task: this._tend,    setCarrying, onCycleFail }),
       ...buildSeedActions   ({ task: this._seed,    setCarrying, onCycleFail }),
+      ...buildDeliverEggActions({ task: this._egg,  setCarrying, onCycleFail }),
     ];
 
     const agent = this.gameObject.getComponent(GOAPAgent);
     agent.actions    = actions;
     agent.worldState = {
-      hasResource: false, hasWater: false, hasSeed: false,
-      atResource: false, atHive: false, atFarm: false,
-      delivered: false, tended: false, seeded: false,
-      resourceAvailable: false, farmAvailable: false, seedAvailable: false,
+      hasResource: false, hasWater: false, hasSeed: false, hasEgg: false,
+      atResource: false, atHive: false, atFarm: false, atEgg: false, atNursery: false,
+      delivered: false, tended: false, seeded: false, eggDelivered: false,
+      resourceAvailable: false, farmAvailable: false, seedAvailable: false, eggAvailable: false,
     };
     agent.onGoalReached = () => {
-      agent.worldState.delivered = false;
-      agent.worldState.tended    = false;
-      agent.worldState.seeded    = false;
+      agent.worldState.delivered    = false;
+      agent.worldState.tended       = false;
+      agent.worldState.seeded       = false;
+      agent.worldState.eggDelivered = false;
       this._releaseClaim();
       this._pickNextCycle();
     };
@@ -111,6 +117,7 @@ export class Worker extends Component {
       this._harvest.clear();
       this._tend.clear();
       this._seed.clear();
+      this._egg.clear();
       agent.goal = HARVEST_GOAL; // unreachable without resources — wander takes over
       return;
     }
@@ -120,16 +127,26 @@ export class Worker extends Component {
       this._harvest.type   = claim.type;
       this._tend.clear();
       this._seed.clear();
+      this._egg.clear();
       agent.goal = HARVEST_GOAL;
     } else if (claim.kind === 'tend') {
       this._tend.target = claim.target;
       this._harvest.clear();
       this._seed.clear();
+      this._egg.clear();
       agent.goal = TEND_GOAL;
+    } else if (claim.kind === 'egg') {
+      this._egg.egg     = claim.target;
+      this._egg.nursery = claim.nursery;
+      this._harvest.clear();
+      this._tend.clear();
+      this._seed.clear();
+      agent.goal = DELIVER_EGG_GOAL;
     } else { // seed
       this._seed.target = claim.target;
       this._harvest.clear();
       this._tend.clear();
+      this._egg.clear();
       agent.goal = SEED_GOAL;
     }
   }
@@ -152,9 +169,11 @@ export class Worker extends Component {
     if (!agent.worldState.hasResource) this._harvest.type = null;
     this._tend.clear();
     this._seed.clear();
+    this._egg.clear();
     if (!agent.worldState.hasResource) {
       agent.worldState.hasWater = false;
       agent.worldState.hasSeed  = false;
+      agent.worldState.hasEgg   = false;
       this._setCarrying(null);
     }
     agent.invalidate();
@@ -173,6 +192,7 @@ export class Worker extends Component {
     agent.worldState.resourceAvailable = this._wm.resourceAvailable();
     agent.worldState.farmAvailable     = this._wm.farmAvailable();
     agent.worldState.seedAvailable     = this._wm.seedAvailable();
+    agent.worldState.eggAvailable      = this._wm.eggAvailable();
   }
 
   update(dt) {
@@ -188,7 +208,8 @@ export class Worker extends Component {
     // it before going idle.
     if ((this._harvest.hasTarget() && !this._harvest.isStillValid()) ||
         (this._tend.hasTarget()    && !this._tend.isStillValid())    ||
-        (this._seed.hasTarget()    && !this._seed.isStillValid())) {
+        (this._seed.hasTarget()    && !this._seed.isStillValid())    ||
+        (this._egg.hasTarget()     && !this._egg.isStillValid())) {
       this._abandonCycle();
     }
 
@@ -219,11 +240,13 @@ export class Worker extends Component {
     if (this._harvest.target)      target = this._harvest.target.name ?? 'resource';
     else if (this._tend.target)    target = this._tend.target.name    ?? 'farm';
     else if (this._seed.target)    target = this._seed.target.name    ?? 'farm';
+    else if (this._egg.egg)        target = 'egg → nursery';
 
     let carrying = 'empty';
     if (ws.hasResource && this._harvest.type) carrying = this._harvest.type;
     else if (ws.hasWater)                     carrying = 'water';
     else if (ws.hasSeed)                      carrying = 'seed';
+    else if (ws.hasEgg)                       carrying = 'egg';
 
     return { task, target, carrying };
   }

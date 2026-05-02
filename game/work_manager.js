@@ -1,10 +1,15 @@
 import { ResourceNode } from './components/resource_node.js';
 import { FarmPlot } from './components/farm_plot.js';
+import { EggPickup } from './components/egg_pickup.js';
+import { Nursery } from './components/nursery.js';
 
 // Per-target concurrent-worker caps. Resource nodes get 2 (multiple ants
 // share a sugar pile reasonably); farms get 1 per work kind (one watering
 // or one seed delivery at a time is enough).
-const MAX_CLAIMS = { harvest: 2, tend: 1, seed: 1 };
+const MAX_CLAIMS = { harvest: 2, tend: 1, seed: 1, egg: 1 };
+
+// Global egg cap: fieldEggs + nurseryEggs + inTransitEggs.
+const EGG_CAP = 10;
 
 // Fairness weight: how quickly wait-time overtakes distance advantage.
 // Score = distance² / (1 + waitSeconds * FAIRNESS_K).  Higher K means older
@@ -45,6 +50,8 @@ export class WorkManager {
     this._dirty         = true;
     this._resourceNodes = []; // gameObjects with a ResourceNode component
     this._farmPlots     = []; // gameObjects with a FarmPlot component
+    this._looseEggs     = []; // gameObjects with an EggPickup component
+    this._nurseries     = []; // gameObjects with a Nursery component
 
     // Fairness: track when each (target, kind) first became eligible.
     // Key format: gameObject instance → Map<kind, timestampSeconds>.
@@ -90,6 +97,17 @@ export class WorkManager {
       }
     }
 
+    // Egg delivery: pair each unclaimed loose egg with the nearest nursery.
+    if (this._nurseries.length > 0) {
+      for (const go of this._looseEggs) {
+        if ((counts.get(go) ?? 0) >= MAX_CLAIMS.egg) continue;
+        const nursery = this._nearestNursery(go);
+        if (!nursery) continue;
+        const score = this._fairScore(ant, go, 'egg', now);
+        if (score < bestScore) { best = { kind: 'egg', target: go, nursery }; bestScore = score; }
+      }
+    }
+
     if (best) this._claims.set(ant, best);
     return best;
   }
@@ -116,6 +134,9 @@ export class WorkManager {
     if (c.kind === 'seed') {
       const fp = c.target.getComponent(FarmPlot);
       return !!fp && fp.needsSeed();
+    }
+    if (c.kind === 'egg') {
+      return !!c.target.getComponent(EggPickup);
     }
     return false;
   }
@@ -149,14 +170,40 @@ export class WorkManager {
     }
     return false;
   }
+  eggAvailable() {
+    this._refreshCaches();
+    return this._looseEggs.length > 0 && this._nurseries.length > 0;
+  }
+
+  // Total eggs across all states (field + nursery + in-transit).
+  // Queen reads this before laying to enforce the global cap.
+  totalEggs() {
+    this._refreshCaches();
+    const fieldEggs = this._looseEggs.length;
+    let nurseryEggs = 0;
+    for (const go of this._nurseries) {
+      const n = go.getComponent(Nursery);
+      if (n) nurseryEggs += n.eggCount;
+    }
+    let inTransit = 0;
+    for (const c of this._claims.values()) {
+      if (c.kind === 'egg') inTransit++;
+    }
+    return fieldEggs + nurseryEggs + inTransit;
+  }
+  eggCapReached() { return this.totalEggs() >= EGG_CAP; }
 
   _refreshCaches() {
     if (!this._dirty) return;
     this._resourceNodes = [];
     this._farmPlots     = [];
+    this._looseEggs     = [];
+    this._nurseries     = [];
     for (const go of this._game.gameObjects) {
       if (go.getComponent(ResourceNode)) this._resourceNodes.push(go);
       if (go.getComponent(FarmPlot))     this._farmPlots.push(go);
+      if (go.getComponent(EggPickup))    this._looseEggs.push(go);
+      if (go.getComponent(Nursery))      this._nurseries.push(go);
     }
     this._dirty = false;
   }
@@ -201,10 +248,25 @@ export class WorkManager {
       if (fp.isReadyToHarvest()) mark(go, 'harvest'); else clear(go, 'harvest');
     }
 
+    for (const go of this._looseEggs) {
+      mark(go, 'egg');
+    }
+
     // Prune entries for removed gameObjects.
     for (const go of this._eligibleSince.keys()) {
       if (!this._game.gameObjects.includes(go)) this._eligibleSince.delete(go);
     }
+  }
+
+  _nearestNursery(from) {
+    let best = null, bestD = Infinity;
+    for (const go of this._nurseries) {
+      const n = go.getComponent(Nursery);
+      if (!n || !n.canAccept()) continue;
+      const d = this._dist2(from, go);
+      if (d < bestD) { best = go; bestD = d; }
+    }
+    return best;
   }
 
   _dist2(ant, target) {

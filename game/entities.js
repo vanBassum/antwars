@@ -8,6 +8,7 @@ import { Worker } from './components/worker.js';
 import { FarmPlot } from './components/farm_plot.js';
 import { Queen } from './components/queen.js';
 import { EggPickup } from './components/egg_pickup.js';
+import { Nursery } from './components/nursery.js';
 
 export const ENTITY_DEFS = [
   new EntityDef({
@@ -95,6 +96,18 @@ export const ENTITY_DEFS = [
       model.scale.setScalar(0.25);
       go.object3D.add(model);
       go.addComponent(new EggPickup());
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'nursery', name: 'Nursery', icon: '🏒', iconUrl: 'assets/icons/Nursery.png', yOffset: 0, occupiesHex: true,
+    modelUrl: 'assets/models/AntHill.glb', // placeholder — reuses anthill model until a dedicated one exists
+    createObject() {
+      const go = new GameObject('Nursery');
+      const model = cloneModel(this.modelUrl);
+      model.scale.setScalar(0.8);
+      go.object3D.add(model);
+      go.addComponent(new Nursery());
       return go;
     },
   }),
