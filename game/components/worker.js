@@ -1,17 +1,21 @@
-import * as THREE from 'three';
 import { Component } from '../../engine/gameobject.js';
 import { GOAPAgent } from '../../engine/ai/goap/goap_agent.js';
-import { Action } from '../../engine/ai/goap/action.js';
 import { Mover } from '../../engine/components/mover.js';
+import { GoToAction } from '../../engine/ai/goap/actions/go_to_action.js';
+import { smoothPath } from '../../engine/hex/smooth_path.js';
 import { cloneModel } from '../../engine/model_cache.js';
+
 import { ResourceNode } from './resource_node.js';
 import { HarvestTask } from './harvest_task.js';
 import { FarmPlot } from './farm_plot.js';
 import { TendTask } from './tend_task.js';
 import { SeedTask } from './seed_task.js';
 
-const SAMPLE_SPACING = 0.25;
-const WANDER_RADIUS  = 3;
+import { buildHarvestActions, HARVEST_GOAL } from '../cycles/harvest_cycle.js';
+import { buildTendActions,    TEND_GOAL    } from '../cycles/tend_cycle.js';
+import { buildSeedActions,    SEED_GOAL    } from '../cycles/seed_cycle.js';
+
+const WANDER_RADIUS = 3;
 
 // Models the ant can visibly carry. Each entry:
 //   url      — model to clone
@@ -26,206 +30,14 @@ const CARRY_CONFIGS = {
   seed:  { url: 'assets/models/Seed.glb',         baseX: Math.PI / 2, tiltMax: 0.2, heading: 0,           offsetZ: -0.35 },
 };
 
-// Build a Catmull-Rom-smoothed waypoint list along a hex path.
-function smoothPath(grid, fromPos, hexPath, finalEdge = null) {
-  const waypoints = hexPath.slice(1).map(h => grid.hexToWorld(h.q, h.r));
-  if (finalEdge) {
-    if (waypoints.length === 0) waypoints.push(finalEdge);
-    else                         waypoints[waypoints.length - 1] = finalEdge;
-  }
-  const ctrl = [
-    new THREE.Vector3(fromPos.x, 0, fromPos.z),
-    ...waypoints.map(w => new THREE.Vector3(w.x, 0, w.z)),
-  ];
-  if (ctrl.length < 3) return waypoints;
-  const curve   = new THREE.CatmullRomCurve3(ctrl, false, 'catmullrom', 0.5);
-  const samples = Math.max(2, Math.round(curve.getLength() / SAMPLE_SPACING));
-  return curve.getSpacedPoints(samples).slice(1).map(p => ({ x: p.x, z: p.z }));
-}
-
-class GoToAction extends Action {
-  constructor(name, getTargetGO, preconditions, effects, onFailure = null) {
-    super(name);
-    this._getTarget    = getTargetGO;
-    this._onFailure    = onFailure;
-    this.preconditions = preconditions;
-    this.effects       = effects;
-  }
-  // If we can't actually go to the target (no target object, no walkable
-  // approach, or no path), bail to onFailure so the worker can re-pick.
-  // Returning silently with mover.arrived=true would let GOAP apply the
-  // action's effects (atX=true) on a trip that didn't actually happen,
-  // which is what produces stuck ants.
-  enter(agent) {
-    this._failed = false;
-    const target = this._getTarget();
-    const mover  = agent.gameObject.getComponent(Mover);
-    if (!target) { this._fail(agent, mover); return; }
-
-    const grid = agent.gameObject.game.hexGrid;
-    if (!grid) { mover.moveTo(target.object3D.position); return; }
-
-    const ant  = agent.gameObject;
-    const from = grid.worldToHex(ant.position.x, ant.position.z);
-    const to   = grid.worldToHex(target.object3D.position.x, target.object3D.position.z);
-
-    let goal, edgeOverride = null;
-    if (grid.getEntrance(to.q, to.r)) {
-      goal = to;
-    } else {
-      const approach = grid.findApproachHex(to.q, to.r, from.q, from.r);
-      if (!approach) { this._fail(agent, mover); return; }
-      goal = approach;
-      const tWP = grid.hexToWorld(to.q, to.r);
-      const aWP = grid.hexToWorld(approach.q, approach.r);
-      edgeOverride = { x: (aWP.x + tWP.x) / 2, z: (aWP.z + tWP.z) / 2 };
-    }
-
-    const path = grid.findPath(from.q, from.r, goal.q, goal.r);
-    if (!path) { this._fail(agent, mover); return; }
-    mover.moveAlong(smoothPath(grid, ant.position, path, edgeOverride));
-  }
-  perform(agent, _dt) {
-    if (this._failed) return false; // never let a failed action complete
-    return agent.gameObject.getComponent(Mover).arrived;
-  }
-  _fail(agent, mover) {
-    this._failed = true;
-    mover.arrived = true;
-    this._onFailure?.();
-    agent.invalidate();
-  }
-}
-
-class WaitAction extends Action {
-  constructor(name, duration, preconditions, effects, onDone) {
-    super(name);
-    this._duration     = duration;
-    this.preconditions = preconditions;
-    this.effects       = effects;
-    this._onDone       = onDone;
-  }
-  enter(_agent) { this._t = 0; }
-  perform(_agent, dt) {
-    this._t += dt;
-    if (this._t >= this._duration) {
-      this._onDone?.();
-      return true;
-    }
-    return false;
-  }
-}
-
-// Wobble + harvestTask.take(). Calls onFailure (and invalidates) if the
-// node is gone or empty.
-class CollectResourceAction extends Action {
-  constructor(task, onSuccess, onFailure, preconditions, effects) {
-    super('Collect');
-    this._task         = task;
-    this._onSuccess    = onSuccess;
-    this._onFailure    = onFailure;
-    this._duration     = 0.6;
-    this.preconditions = preconditions;
-    this.effects       = effects;
-  }
-  enter(_agent) { this._t = 0; }
-  perform(agent, dt) {
-    this._t += dt;
-    const p = Math.min(1, this._t / this._duration);
-
-    const decay = Math.exp(-p * 4);
-    const wave  = Math.sin(p * Math.PI * 2 * 4);
-    const amp   = 0.3 * decay;
-    agent.gameObject.object3D.scale.set(
-      1 - amp * wave * 0.5,
-      1 + amp * wave,
-      1 - amp * wave * 0.5,
-    );
-
-    if (this._t >= this._duration) {
-      if (this._task.take() === 0) {
-        this._task.clear();
-        this._onFailure?.();
-        agent.worldState.atResource = false;
-        agent.invalidate();
-        return false;
-      }
-      this._onSuccess?.();
-      return true;
-    }
-    return false;
-  }
-  exit(agent) {
-    agent.gameObject.object3D.scale.set(1, 1, 1);
-  }
-}
-
-// Apply water to the picked farm. Calls onFailure (and invalidates) if the
-// farm no longer needs attention.
-class WaterFarmAction extends Action {
-  constructor(task, onSuccess, onFailure, preconditions, effects) {
-    super('Water');
-    this._task         = task;
-    this._onSuccess    = onSuccess;
-    this._onFailure    = onFailure;
-    this._duration     = 0.4;
-    this.preconditions = preconditions;
-    this.effects       = effects;
-  }
-  enter(_agent) { this._t = 0; }
-  perform(agent, dt) {
-    this._t += dt;
-    if (this._t >= this._duration) {
-      if (!this._task.water()) {
-        this._task.clear();
-        this._onFailure?.();
-        agent.worldState.atFarm = false;
-        agent.invalidate();
-        return false;
-      }
-      this._onSuccess?.();
-      return true;
-    }
-    return false;
-  }
-}
-
-// Hand off a seed to the picked farm — flips it from AWAITING_SEED to
-// GROWING. Same shape as WaterFarmAction, different verb.
-class DropSeedAction extends Action {
-  constructor(task, onSuccess, onFailure, preconditions, effects) {
-    super('DropSeed');
-    this._task         = task;
-    this._onSuccess    = onSuccess;
-    this._onFailure    = onFailure;
-    this._duration     = 0.4;
-    this.preconditions = preconditions;
-    this.effects       = effects;
-  }
-  enter(_agent) { this._t = 0; }
-  perform(agent, dt) {
-    this._t += dt;
-    if (this._t >= this._duration) {
-      if (!this._task.deliver()) {
-        this._task.clear();
-        this._onFailure?.();
-        agent.worldState.atFarm = false;
-        agent.invalidate();
-        return false;
-      }
-      this._onSuccess?.();
-      return true;
-    }
-    return false;
-  }
-}
-
-// Cycles between two kinds of work. Tasks are dispatched by the central
-// WorkManager (game.workManager): on each cycle boundary the worker
-// requests a fresh claim and routes it to either the harvest or tend
-// data slot, then GOAP plans toward the matching goal.
-//   Harvest:  GoToHarvest → Collect → GoToHive → Deposit
-//   Tend:     GoToHive → TakeWater → GoToFarm → Water
+// Worker composes three GOAP cycles (harvest / tend / seed) plus a shared
+// "GoToHive" travel action. The cycle modules own their action shapes;
+// this component owns dispatch, claim management, idle wander, and
+// per-pickup carry visuals.
+//
+//   Harvest: GoToHarvest → Collect → GoToHive (shared) → Deposit
+//   Tend:    GoToHive (shared) → TakeWater → GoToFarmForWater → Water
+//   Seed:    GoToHive (shared) → TakeSeed  → GoToFarmForSeed  → DropSeed
 export class Worker extends Component {
   start() {
     const game       = this.gameObject.game;
@@ -244,61 +56,20 @@ export class Worker extends Component {
     // what prevents stuck ants — without it the planner would re-plan the
     // same dead target on the next tick.
     const onCycleFail = () => this._abandonCycle();
+    const creditDeposit = (type, amount) => game.resources?.add(type, amount);
+
+    // Shared travel: GoToHive — open precondition so all three cycles can
+    // pull it into their plan whenever they need atHive=true.
+    const goToHive = new GoToAction('GoToHive', hiveGO,
+      { atHive: false },
+      { atHive: true, atResource: false, atFarm: false },
+      onCycleFail);
 
     const actions = [
-      // Harvest cycle
-      new GoToAction('GoToHarvest', () => this._harvest.target,
-        { hasResource: false, atResource: false, resourceAvailable: true },
-        { atResource: true,   atHive: false, atFarm: false },
-        onCycleFail),
-      new CollectResourceAction(this._harvest,
-        () => setCarrying(this._harvest.type),
-        onCycleFail,
-        { atResource: true, hasResource: false, resourceAvailable: true },
-        { hasResource: true }),
-      // Shared travel: GoToHive — open precondition so both cycles can use it.
-      // Hive is a fixed entity; failure here means something catastrophic
-      // (no hive at all), so abandon cleanly instead of looping.
-      new GoToAction('GoToHive', hiveGO,
-        { atHive: false },
-        { atHive: true, atResource: false, atFarm: false },
-        onCycleFail),
-      new WaitAction('Deposit', 0.3,
-        { atHive: true, hasResource: true },
-        { hasResource: false, delivered: true },
-        () => {
-          if (this._harvest.type) game.resources?.add(this._harvest.type, 1);
-          setCarrying(null);
-          this._harvest.clear();
-        }),
-      // Tend (water) cycle
-      new WaitAction('TakeWater', 0.2,
-        { atHive: true, hasWater: false },
-        { hasWater: true },
-        () => setCarrying('water')),
-      new GoToAction('GoToFarmForWater', () => this._tend.target,
-        { atFarm: false, hasWater: true, farmAvailable: true },
-        { atFarm: true, atResource: false, atHive: false },
-        onCycleFail),
-      new WaterFarmAction(this._tend,
-        () => { setCarrying(null); this._tend.clear(); },
-        onCycleFail,
-        { atFarm: true, hasWater: true, farmAvailable: true },
-        { hasWater: false, tended: true }),
-      // Seed-delivery cycle
-      new WaitAction('TakeSeed', 0.2,
-        { atHive: true, hasSeed: false },
-        { hasSeed: true },
-        () => setCarrying('seed')),
-      new GoToAction('GoToFarmForSeed', () => this._seed.target,
-        { atFarm: false, hasSeed: true, seedAvailable: true },
-        { atFarm: true, atResource: false, atHive: false },
-        onCycleFail),
-      new DropSeedAction(this._seed,
-        () => { setCarrying(null); this._seed.clear(); },
-        onCycleFail,
-        { atFarm: true, hasSeed: true, seedAvailable: true },
-        { hasSeed: false, seeded: true }),
+      goToHive,
+      ...buildHarvestActions({ task: this._harvest, setCarrying, onCycleFail, creditDeposit }),
+      ...buildTendActions   ({ task: this._tend,    setCarrying, onCycleFail }),
+      ...buildSeedActions   ({ task: this._seed,    setCarrying, onCycleFail }),
     ];
 
     const agent = this.gameObject.getComponent(GOAPAgent);
@@ -313,7 +84,7 @@ export class Worker extends Component {
       agent.worldState.delivered = false;
       agent.worldState.tended    = false;
       agent.worldState.seeded    = false;
-      this._releaseClaim();   // cycle complete — free the slot for someone else
+      this._releaseClaim();
       this._pickNextCycle();
     };
     agent.onPlanFailed = () => {
@@ -325,26 +96,24 @@ export class Worker extends Component {
     this._pickNextCycle();
   }
 
-  // Pick a goal for the next cycle. Carry state biases first; otherwise we
-  // ask the WorkManager for a claim and route it.
+  // ── Cycle dispatch ──────────────────────────────────────────────────────
   _pickNextCycle() {
     const agent = this.gameObject.getComponent(GOAPAgent);
     if (!agent) return;
 
-    // Already carrying a resource → finish that delivery, no new claim needed.
+    // Already carrying a gathered resource → finish the delivery; no new
+    // claim needed (and the harvest task still holds the type).
     if (agent.worldState.hasResource) {
-      agent.goal = { delivered: true };
+      agent.goal = HARVEST_GOAL;
       return;
     }
 
-    // Ask the WorkManager for the best available task.
     const claim = this._wm?.request(this.gameObject) ?? null;
-
     if (!claim) {
       this._harvest.clear();
       this._tend.clear();
       this._seed.clear();
-      agent.goal = { delivered: true };
+      agent.goal = HARVEST_GOAL; // unreachable without resources — wander takes over
       return;
     }
 
@@ -353,17 +122,17 @@ export class Worker extends Component {
       this._harvest.type   = claim.type;
       this._tend.clear();
       this._seed.clear();
-      agent.goal = { delivered: true };
+      agent.goal = HARVEST_GOAL;
     } else if (claim.kind === 'tend') {
       this._tend.target = claim.target;
       this._harvest.clear();
       this._seed.clear();
-      agent.goal = { tended: true };
+      agent.goal = TEND_GOAL;
     } else { // seed
       this._seed.target = claim.target;
       this._harvest.clear();
       this._tend.clear();
-      agent.goal = { seeded: true };
+      agent.goal = SEED_GOAL;
     }
   }
 
@@ -386,8 +155,6 @@ export class Worker extends Component {
     this._tend.clear();
     this._seed.clear();
     if (!agent.worldState.hasResource) {
-      // Empty hands (or only water/seed) — drop logistical cargo so the
-      // visual matches state and we go fully idle.
       agent.worldState.hasWater = false;
       agent.worldState.hasSeed  = false;
       this._setCarrying(null);
@@ -396,15 +163,12 @@ export class Worker extends Component {
     this._pickNextCycle();
   }
 
+  // ── Per-frame ──────────────────────────────────────────────────────────
   _refreshAvailability() {
     const agent = this.gameObject.getComponent(GOAPAgent);
     if (!agent) return;
     const game = this.gameObject.game;
 
-    // Just keep the *availability* flags in sync. The atX location flags
-    // are owned by the GoTo action effects — actions reset them as the ant
-    // moves between zones, and onCycleFail clears atFarm explicitly when a
-    // farm-side action invalidates.
     agent.worldState.resourceAvailable = game.gameObjects.some(g => g.getComponent(ResourceNode));
     agent.worldState.farmAvailable     = game.gameObjects.some(g => {
       const fp = g.getComponent(FarmPlot);
@@ -449,6 +213,7 @@ export class Worker extends Component {
     this._releaseClaim();
   }
 
+  // ── Hooks for other systems ────────────────────────────────────────────
   // Consumed by DebugOverlay when debug mode is on.
   getDebugInfo() {
     const agent = this.gameObject.getComponent(GOAPAgent);
@@ -456,9 +221,9 @@ export class Worker extends Component {
     const task  = agent?.currentActionName ?? 'idle';
 
     let target = '—';
-    if (this._harvest.target) target = this._harvest.target.name ?? 'resource';
-    else if (this._tend.target) target = this._tend.target.name ?? 'farm';
-    else if (this._seed.target) target = this._seed.target.name ?? 'farm';
+    if (this._harvest.target)      target = this._harvest.target.name ?? 'resource';
+    else if (this._tend.target)    target = this._tend.target.name    ?? 'farm';
+    else if (this._seed.target)    target = this._seed.target.name    ?? 'farm';
 
     let carrying = 'empty';
     if (ws.hasResource && this._harvest.type) carrying = this._harvest.type;
@@ -468,6 +233,7 @@ export class Worker extends Component {
     return { task, target, carrying };
   }
 
+  // ── Internals ──────────────────────────────────────────────────────────
   _pickWanderTarget() {
     const game = this.gameObject.game;
     const grid = game.hexGrid;
