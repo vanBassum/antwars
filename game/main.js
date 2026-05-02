@@ -13,6 +13,7 @@ import { ActionBar } from './action_bar.js';
 import { PlacementController } from './placement_controller.js';
 import { ContextMenu } from './context_menu.js';
 import { WorkManager } from './work_manager.js';
+import { toggleDebug } from './debug.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -101,3 +102,8 @@ new ActionBar(game.resources, [
 ]);
 
 game.start();
+
+// Toggle debug mode with the backtick (`) key.
+document.addEventListener('keydown', e => {
+  if (e.code === 'Backquote' && !e.repeat) toggleDebug();
+});

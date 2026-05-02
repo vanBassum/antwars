@@ -13,10 +13,33 @@
       color: #fff; font-size: 16px; z-index: 1000; pointer-events: none;
       backdrop-filter: blur(6px);
     }
-    .resource-item  { display: flex; align-items: center; gap: 6px; }
+    .resource-item  { display: flex; align-items: center; gap: 6px; position: relative; }
     .resource-icon  { font-size: 20px; }
     img.resource-icon { width: 24px; height: 24px; object-fit: contain; }
     .resource-count { font-weight: 600; min-width: 30px; text-align: right; }
+    /* Debug mode: items become clickable cheat buttons */
+    .resource-bar--debug .resource-item {
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.1s;
+      padding: 2px 4px;
+    }
+    .resource-bar--debug .resource-item:hover {
+      background: rgba(255, 255, 180, 0.18);
+      outline: 1px solid rgba(255, 255, 100, 0.35);
+    }
+    /* Floating "+10" confirmation popup */
+    .resource-cheat-popup {
+      position: absolute;
+      top: -20px; left: 50%; transform: translateX(-50%);
+      font-size: 12px; font-weight: 700; color: #ffe066;
+      pointer-events: none; white-space: nowrap;
+      animation: cheat-float 0.8s ease-out forwards;
+    }
+    @keyframes cheat-float {
+      0%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-18px); }
+    }
     .action-bar {
       position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
       display: flex; gap: 8px; z-index: 1000;
