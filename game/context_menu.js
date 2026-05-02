@@ -123,15 +123,56 @@ export class ContextMenu {
     if (this._updateTimer) { clearInterval(this._updateTimer); this._updateTimer = null; }
     if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
     if (this._menu) { this._menu.remove(); this._menu = null; }
-    this._target = null;
-    this._anchor = null;
+    this._target  = null;
+    this._anchor  = null;   // from #27 (world-space anchor)
+    this._lastSig = null;   // from #29 (differential-render fingerprint)
   }
 
   _update() {
     if (!this._target || !this._menu) return;
     // If the gameObject got removed (e.g. depleted resource), close.
     if (!this._game.gameObjects.includes(this._target.go)) { this._close(); return; }
-    this._render();
+    const data = this._target.provider.getContextMenu();
+    if (!data) { this._close(); return; }
+
+    // Only do a full DOM rebuild when the menu structure changes (rows
+    // appearing/disappearing, selection toggling). Value-only changes
+    // (progress fill, state text) are patched in-place so the hover state
+    // and any in-flight click are not disrupted by DOM teardown.
+    const sig = this._sig(data);
+    if (sig !== this._lastSig) {
+      this._renderData(data);
+      return;
+    }
+    this._patch(data);
+  }
+
+  // Structural fingerprint — changes only when rows appear/disappear or a
+  // picker/action selection toggles. Does NOT encode live progress values.
+  _sig(data) {
+    return JSON.stringify([
+      data.title ?? '',
+      Array.isArray(data.progress) ? data.progress.length : (data.progress ? 1 : 0),
+      data.picker?.options?.map(o => `${o.label}:${o.selected ? '1' : '0'}`).join(',') ?? '',
+      data.actions?.map(a => `${a.label}:${a.selected ? '1' : '0'}`).join(',') ?? '',
+    ]);
+  }
+
+  // Fast in-place update for values that change on every poll tick.
+  _patch(data) {
+    if (data.state) {
+      const el = this._menu.querySelector('.context-menu-state');
+      if (el) el.textContent = data.state;
+    }
+    if (data.progress) {
+      const items = Array.isArray(data.progress) ? data.progress : [data.progress];
+      const fills = this._menu.querySelectorAll('.progress-fill');
+      const texts = this._menu.querySelectorAll('.progress-text');
+      items.forEach((p, i) => {
+        if (fills[i]) fills[i].style.width = `${Math.max(0, Math.min(1, p.value)) * 100}%`;
+        if (texts[i]) texts[i].textContent = p.text ?? `${Math.round(p.value * 100)}%`;
+      });
+    }
   }
 
   // Schedule a per-frame reposition via requestAnimationFrame so the menu
@@ -193,7 +234,11 @@ export class ContextMenu {
     if (!this._target || !this._menu) return;
     const data = this._target.provider.getContextMenu();
     if (!data) { this._close(); return; }
+    this._renderData(data);
+  }
 
+  _renderData(data) {
+    this._lastSig = this._sig(data);
     this._menu.innerHTML = '';
     if (data.title) {
       const el = document.createElement('div');
