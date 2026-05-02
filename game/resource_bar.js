@@ -1,5 +1,7 @@
-// Top-of-screen resource HUD. Built from a list of { key, icon, label } entries
-// and bound to a Resources instance.
+// Top-of-screen resource HUD. Built from a list of { key, icon, iconUrl?, label }
+// entries and bound to a Resources instance.
+import { makeIcon } from './icon_helper.js';
+
 export class ResourceBar {
   constructor(resources, types, parent = document.body) {
     this._items = new Map();
@@ -12,9 +14,7 @@ export class ResourceBar {
       item.className = 'resource-item';
       item.title = t.label;
 
-      const icon  = document.createElement('span');
-      icon.className   = 'resource-icon';
-      icon.textContent = t.icon;
+      const icon = makeIcon(t.icon, t.iconUrl ?? null, 'resource-icon');
 
       const count = document.createElement('span');
       count.className   = 'resource-count';

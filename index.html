@@ -15,6 +15,7 @@
     }
     .resource-item  { display: flex; align-items: center; gap: 6px; }
     .resource-icon  { font-size: 20px; }
+    img.resource-icon { width: 24px; height: 24px; object-fit: contain; }
     .resource-count { font-weight: 600; min-width: 30px; text-align: right; }
     .action-bar {
       position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -34,6 +35,7 @@
     }
     .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .action-btn .action-icon { font-size: 28px; line-height: 1; }
+    img.action-icon { width: 40px; height: 40px; object-fit: contain; }
     .action-btn .action-cost { font-size: 11px; opacity: 0.85; }
     .context-menu {
       position: fixed; z-index: 1100;
@@ -83,14 +85,16 @@
       border-color: rgba(255, 255, 255, 0.4);
     }
     .context-menu-btn .btn-icon  { font-size: 18px; }
+    img.btn-icon { width: 22px; height: 22px; object-fit: contain; }
     .context-menu-btn .btn-label { font-weight: 500; }
     .context-menu-picker {
       display: flex; gap: 4px; padding: 4px 4px 2px;
     }
+    .picker-icon { font-size: 22px; line-height: 1; }
+    img.picker-icon { width: 26px; height: 26px; object-fit: contain; }
     .picker-btn {
       width: 36px; height: 36px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 22px; line-height: 1;
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 4px; color: #fff;

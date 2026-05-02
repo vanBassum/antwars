@@ -1,9 +1,11 @@
 // Bottom-of-screen hotbar of square buttons. Each action takes:
-//   { icon, label, costLabel, cost: { resourceKey: amount }, onActivate }
+//   { icon, iconUrl?, label, costLabel, cost: { resourceKey: amount }, onActivate }
 // onActivate is called as `onActivate(commit)` — the action invokes
 // `commit()` when it actually wants the cost deducted. This lets async
 // flows (e.g. enter placement mode, wait for click) commit on success
 // and skip on cancel.
+import { makeIcon } from './icon_helper.js';
+
 export class ActionBar {
   constructor(resources, actions, parent = document.body) {
     this._resources = resources;
@@ -17,9 +19,7 @@ export class ActionBar {
       btn.className = 'action-btn';
       btn.title = action.label;
 
-      const icon = document.createElement('span');
-      icon.className   = 'action-icon';
-      icon.textContent = action.icon;
+      const icon = makeIcon(action.icon, action.iconUrl ?? null, 'action-icon');
 
       const cost = document.createElement('span');
       cost.className   = 'action-cost';

@@ -2,8 +2,8 @@ import { Component } from '../../engine/gameobject.js';
 import { cloneModel } from '../../engine/model_cache.js';
 
 export const FARM_CROPS = [
-  { key: 'berry', icon: '🫐', label: 'Berry Bush' },
-  { key: 'tree',  icon: '🌳', label: 'Tree' },
+  { key: 'berry', icon: '🫐', iconUrl: 'assets/icons/BerryBush.png', label: 'Berry Bush' },
+  { key: 'tree',  icon: '🌳', iconUrl: 'assets/icons/Bush.png',      label: 'Tree' },
 ];
 
 // Lifecycle states. Other systems (WorkManager) react to these.
@@ -295,6 +295,7 @@ export class FarmPlot extends Component {
       picker: {
         options: FARM_CROPS.map(c => ({
           icon:     c.icon,
+          iconUrl:  c.iconUrl,
           label:    c.label,
           selected: this.crop === c.key,
           onClick:  () => this.selectCrop(c.key),
