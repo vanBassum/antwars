@@ -34,6 +34,8 @@ game.add(sun);
 await Promise.all([
   preloadEntityModels(),
   loadModel('assets/models/SugarBlob.glb'),
+  // The water droplet model is being authored — load if present, ignore otherwise.
+  loadModel('assets/models/WaterDroplet.glb').catch(() => {}),
 ]);
 
 // Hex size = anthill footprint inscribed exactly (flat-to-flat = sqrt(3) * size)
