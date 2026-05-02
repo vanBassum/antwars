@@ -23,6 +23,7 @@ const CARRY_CONFIGS = {
   sugar: { url: 'assets/models/SugarBlob.glb',    baseX: 0,           tiltMax: 0.3, heading: Math.PI * 2, offsetZ:  0    },
   wood:  { url: 'assets/models/Branch.glb',       baseX: Math.PI / 2, tiltMax: 0.4, heading: Math.PI * 2, offsetZ: -0.35 },
   water: { url: 'assets/models/WaterDroplet.glb', baseX: 0,           tiltMax: 0.2, heading: Math.PI * 2, offsetZ:  0    },
+  seed:  { url: 'assets/models/Seed.glb',         baseX: Math.PI / 2, tiltMax: 0.2, heading: 0,           offsetZ: -0.35 },
 };
 
 // Build a Catmull-Rom-smoothed waypoint list along a hex path.
