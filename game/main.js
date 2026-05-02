@@ -55,6 +55,7 @@ await Promise.all([
   loadModel('assets/models/Seed.glb'),
   // Crop visuals spawned by FarmPlot when growing.
   loadModel('assets/models/BerryBush.glb'),
+  loadModel('assets/models/Egg.glb'),
 ]);
 
 // Hex size = anthill footprint inscribed exactly (flat-to-flat = sqrt(3) * size)

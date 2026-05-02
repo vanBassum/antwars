@@ -6,6 +6,8 @@ import { GOAPAgent } from '../engine/ai/goap/goap_agent.js';
 import { ResourceNode } from './components/resource_node.js';
 import { Worker } from './components/worker.js';
 import { FarmPlot } from './components/farm_plot.js';
+import { Queen } from './components/queen.js';
+import { EggPickup } from './components/egg_pickup.js';
 
 export const ENTITY_DEFS = [
   new EntityDef({
@@ -68,6 +70,31 @@ export const ENTITY_DEFS = [
       go.addComponent(new Mover(1.5));
       go.addComponent(new GOAPAgent());
       go.addComponent(new Worker());
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'queen', name: 'Queen', icon: '👑', iconUrl: 'assets/icons/Ant.png',
+    modelUrl: 'assets/models/Ant.glb',
+    createObject() {
+      const go = new GameObject('Queen');
+      const model = cloneModel(this.modelUrl);
+      model.scale.setScalar(0.3);
+      go.object3D.add(model);
+      go.addComponent(new Mover(1.0));
+      go.addComponent(new Queen());
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'egg', name: 'Egg', icon: '🥚',
+    modelUrl: 'assets/models/Egg.glb',
+    createObject() {
+      const go = new GameObject('Egg');
+      const model = cloneModel(this.modelUrl);
+      model.scale.setScalar(0.25);
+      go.object3D.add(model);
+      go.addComponent(new EggPickup());
       return go;
     },
   }),
