@@ -115,6 +115,7 @@ export const ENTITY_DEFS = [
   }),
   new EntityDef({
     id: 'training_hut', name: 'Training Hut', icon: '🏠', iconUrl: 'assets/icons/TrainingHut.png', yOffset: 0, occupiesHex: true,
+    entrance: [0, 1], // south neighbor — ants enter/leave through the front door
     modelUrl: 'assets/models/TrainingHut.glb',
     createObject() {
       const go = new GameObject('Training Hut');
