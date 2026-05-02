@@ -1,4 +1,4 @@
-import { Component } from '../gameobject.js';
+import { Component } from '../../engine/gameobject.js';
 
 const WOBBLE_DURATION = 0.5;
 

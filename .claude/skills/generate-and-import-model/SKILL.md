@@ -47,7 +47,7 @@ If the Gradio server isn't responding, stop and tell the user — don't retry; t
 
 3. **Verify** the script printed `=== DONE ===` and the listed file sizes look sane (a few hundred KB for a typical small prop). Then `git -C c:\Workspace\antwars status assets/models/` to confirm only the intended file changed (defense against the side-effect-deletion bug noted in the optimize-glb-for-game skill).
 
-4. **Don't auto-register** the entity. Adding it to `ENTITY_DEFS` in [engine/entity_registry.js](../../../engine/entity_registry.js) is a separate, deliberate step.
+4. **Don't auto-register** the entity. Adding it to `ENTITY_DEFS` in [game/entities.js](../../../game/entities.js) is a separate, deliberate step.
 
 ## What the script does
 

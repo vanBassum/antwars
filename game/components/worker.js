@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { Component } from '../gameobject.js';
-import { GOAPAgent } from '../ai/goap/goap_agent.js';
-import { Action } from '../ai/goap/action.js';
-import { Mover } from './mover.js';
+import { Component } from '../../engine/gameobject.js';
+import { GOAPAgent } from '../../engine/ai/goap/goap_agent.js';
+import { Action } from '../../engine/ai/goap/action.js';
+import { Mover } from '../../engine/components/mover.js';
+import { cloneModel } from '../../engine/model_cache.js';
 import { ResourceNode } from './resource_node.js';
 import { HarvestTask } from './harvest_task.js';
-import { cloneModel } from '../entity_registry.js';
 
 // Average distance between adjacent samples along the smoothed curve.
 // Smaller = smoother but more waypoints. ~0.25 m looks good at hex sizes ~1.5-2m.

@@ -5,7 +5,7 @@ description: Simplify a high-poly GLB mesh and downscale its embedded textures s
 
 # Optimize a generated GLB for use in the game
 
-The engine uses plain `GLTFLoader` (no Meshopt or Draco decoder registered — see [engine/entity_registry.js](../../../engine/entity_registry.js) and [engine/components/model_renderer.js](../../../engine/components/model_renderer.js)), so any optimizations have to produce a vanilla GLB. The pipeline does three things:
+The engine uses plain `GLTFLoader` (no Meshopt or Draco decoder registered — see [engine/model_cache.js](../../../engine/model_cache.js) and [engine/components/model_renderer.js](../../../engine/components/model_renderer.js)), so any optimizations have to produce a vanilla GLB. The pipeline does three things:
 
 1. **Mesh simplification** with `gltfpack` (no compression flags).
 2. **Texture downscale** to 512×512 with `@gltf-transform/cli resize` (keeps PNG/JPEG, no KTX2).
@@ -28,7 +28,7 @@ All run via `npx -y` so no global install is required.
 
 4. **Delete the source** from `Downloads/` once the final asset is in place — the mesh puller reuses the same filename, so leftover files cause confusion next time. Only do this after confirming the final GLB exists at the target path.
 
-5. **Don't auto-register the entity.** Adding the model to `ENTITY_DEFS` in [engine/entity_registry.js](../../../engine/entity_registry.js) is a separate, deliberate step the user does when they're ready to spawn it. Mention that as a follow-up but don't do it unprompted.
+5. **Don't auto-register the entity.** Adding the model to `ENTITY_DEFS` in [game/entities.js](../../../game/entities.js) is a separate, deliberate step the user does when they're ready to spawn it. Mention that as a follow-up but don't do it unprompted.
 
 ## Pipeline (PowerShell)
 

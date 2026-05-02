@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ENTITY_DEFS } from '../engine/entity_registry.js';
+import { ENTITY_DEFS } from '../game/entities.js';
 
 export class Prefabs {
   constructor(el, game, selection) {

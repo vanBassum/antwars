@@ -3,7 +3,7 @@ import { Game }               from '../engine/game.js';
 import { GameObject }         from '../engine/gameobject.js';
 import { CameraRig }          from '../engine/components/camera_rig.js';
 import { DirectionalLight }   from '../engine/components/directional_light.js';
-import { preloadEntityModels } from '../engine/entity_registry.js';
+import { preloadEntityModels } from '../game/entities.js';
 import { Selection }          from './selection.js';
 import { Terrain }            from './terrain.js';
 import { Hierarchy }          from './hierarchy.js';
