@@ -19,8 +19,8 @@ game.resources = new Resources();
 game.resources.set('sugar', 10);
 game.resources.set('wood',  10);
 new ResourceBar(game.resources, [
-  { key: 'sugar', icon: '🍬', label: 'Sugar' },
-  { key: 'wood',  icon: '🪵', label: 'Wood' },
+  { key: 'sugar', icon: '🍬', iconUrl: 'assets/icons/SugarNode.png', label: 'Sugar' },
+  { key: 'wood',  icon: '🪵', iconUrl: 'assets/icons/Branch.png',    label: 'Wood' },
 ]);
 
 const camera = new GameObject('Camera');
@@ -83,6 +83,7 @@ function startFarmPlacement(commit) {
 new ActionBar(game.resources, [
   {
     icon:      '🐜',
+    iconUrl:   'assets/icons/Ant.png',
     label:     'Worker Ant',
     costLabel: '5 🍬',
     cost:      { sugar: 5 },
@@ -90,6 +91,7 @@ new ActionBar(game.resources, [
   },
   {
     icon:      '🌱',
+    iconUrl:   'assets/icons/FarmPlot.png',
     label:     'Farm Plot',
     costLabel: '10 🪵',
     cost:      { wood: 10 },

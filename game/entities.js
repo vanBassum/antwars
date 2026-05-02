@@ -9,7 +9,7 @@ import { FarmPlot } from './components/farm_plot.js';
 
 export const ENTITY_DEFS = [
   new EntityDef({
-    id: 'watchtower', name: 'Watchtower', icon: '🗼', yOffset: 0, occupiesHex: true,
+    id: 'watchtower', name: 'Watchtower', icon: '🗼', iconUrl: 'assets/icons/WatchTower.png', yOffset: 0, occupiesHex: true,
     modelUrl: 'assets/models/WatchTower.glb',
     createObject() {
       const go = new GameObject('Watchtower');
@@ -18,7 +18,7 @@ export const ENTITY_DEFS = [
     },
   }),
   new EntityDef({
-    id: 'anthill', name: 'Ant Hill', icon: '🐜', yOffset: 0, occupiesHex: true,
+    id: 'anthill', name: 'Ant Hill', icon: '🐜', iconUrl: 'assets/icons/AntHill.png', yOffset: 0, occupiesHex: true,
     entrance: [0, 1], // south neighbor — ants enter/leave through the bottom
     modelUrl: 'assets/models/AntHill.glb',
     createObject() {
@@ -28,7 +28,7 @@ export const ENTITY_DEFS = [
     },
   }),
   new EntityDef({
-    id: 'sugar_node', name: 'Sugar Node', icon: '🍬', yOffset: 0, occupiesHex: true,
+    id: 'sugar_node', name: 'Sugar Node', icon: '🍬', iconUrl: 'assets/icons/SugarNode.png', yOffset: 0, occupiesHex: true,
     modelUrl: 'assets/models/SugarNode.glb',
     createObject() {
       const go = new GameObject('Sugar Node');
@@ -38,7 +38,7 @@ export const ENTITY_DEFS = [
     },
   }),
   new EntityDef({
-    id: 'bush', name: 'Bush', icon: '🌿', yOffset: 0, occupiesHex: true,
+    id: 'bush', name: 'Bush', icon: '🌿', iconUrl: 'assets/icons/Bush.png', yOffset: 0, occupiesHex: true,
     modelUrl: 'assets/models/Bush.glb',
     createObject() {
       const go = new GameObject('Bush');
@@ -48,7 +48,7 @@ export const ENTITY_DEFS = [
     },
   }),
   new EntityDef({
-    id: 'farm_plot', name: 'Farm Plot', icon: '🌱', yOffset: 0, occupiesHex: true,
+    id: 'farm_plot', name: 'Farm Plot', icon: '🌱', iconUrl: 'assets/icons/FarmPlot.png', yOffset: 0, occupiesHex: true,
     modelUrl: 'assets/models/FarmPlot.glb',
     createObject() {
       const go = new GameObject('Farm Plot');
@@ -58,7 +58,7 @@ export const ENTITY_DEFS = [
     },
   }),
   new EntityDef({
-    id: 'ant', name: 'Ant', icon: '🐜', yOffset: 0,
+    id: 'ant', name: 'Ant', icon: '🐜', iconUrl: 'assets/icons/Ant.png', yOffset: 0,
     modelUrl: 'assets/models/Ant.glb',
     createObject() {
       const go = new GameObject('Ant');

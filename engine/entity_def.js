@@ -1,8 +1,9 @@
 export class EntityDef {
-  constructor({ id, name, icon, yOffset = 0, modelUrl = null, createObject, occupiesHex = false, entrance = null }) {
+  constructor({ id, name, icon, iconUrl = null, yOffset = 0, modelUrl = null, createObject, occupiesHex = false, entrance = null }) {
     this.id           = id;
     this.name         = name;
     this.icon         = icon;
+    this.iconUrl      = iconUrl;
     this.yOffset      = yOffset;
     this.modelUrl     = modelUrl;
     this.createObject = createObject;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { makeIcon } from './icon_helper.js';
 
 const UPDATE_MS = 200;
 
@@ -161,7 +162,7 @@ export class ContextMenu {
         const btn = document.createElement('button');
         btn.className   = 'picker-btn' + (opt.selected ? ' selected' : '');
         btn.title       = opt.label;
-        btn.textContent = opt.icon;
+        btn.append(makeIcon(opt.icon, opt.iconUrl ?? null, 'picker-icon'));
         btn.addEventListener('click', (ev) => {
           ev.stopPropagation();
           opt.onClick?.();
@@ -176,7 +177,11 @@ export class ContextMenu {
         const btn = document.createElement('button');
         btn.className = 'context-menu-btn' + (action.selected ? ' selected' : '');
         btn.title     = action.label;
-        btn.innerHTML = `<span class="btn-icon">${action.icon}</span><span class="btn-label">${action.label}</span>`;
+        btn.append(makeIcon(action.icon, action.iconUrl ?? null, 'btn-icon'));
+        const lbl = document.createElement('span');
+        lbl.className   = 'btn-label';
+        lbl.textContent = action.label;
+        btn.append(lbl);
         btn.addEventListener('click', (ev) => {
           ev.stopPropagation();
           action.onClick?.();

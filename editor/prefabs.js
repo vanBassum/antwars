@@ -56,24 +56,47 @@ export class Prefabs {
   // ── Panel ─────────────────────────────────────────────────────────────────
 
   _render() {
-    const cards = ENTITY_DEFS.map(def => `
-      <div class="prefab-card" data-id="${def.id}">
-        <span class="prefab-icon">${def.icon}</span>
-        <span class="prefab-name">${def.name}</span>
-      </div>`).join('');
+    const header = document.createElement('div');
+    header.className = 'panel-header';
+    header.textContent = 'Prefabs';
 
-    this._el.innerHTML = `
-      <div class="panel-header">Prefabs</div>
-      <div class="prefabs-row">${cards}</div>`;
+    const row = document.createElement('div');
+    row.className = 'prefabs-row';
 
-    this._el.querySelectorAll('.prefab-card').forEach(card => {
+    for (const def of ENTITY_DEFS) {
+      const card = document.createElement('div');
+      card.className = 'prefab-card';
+      card.dataset.id = def.id;
+
+      if (def.iconUrl) {
+        const img = document.createElement('img');
+        img.className = 'prefab-icon';
+        img.src = def.iconUrl;
+        img.alt = def.icon;
+        img.draggable = false;
+        card.append(img);
+      } else {
+        const span = document.createElement('span');
+        span.className = 'prefab-icon';
+        span.textContent = def.icon;
+        card.append(span);
+      }
+
+      const name = document.createElement('span');
+      name.className = 'prefab-name';
+      name.textContent = def.name;
+      card.append(name);
+
       card.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
-        const def = ENTITY_DEFS.find(d => d.id === card.dataset.id);
-        if (def) this._startSpawn(def);
+        this._startSpawn(def);
         e.preventDefault();
       });
-    });
+      row.append(card);
+    }
+
+    this._el.innerHTML = '';
+    this._el.append(header, row);
   }
 
   // ── Raycasting ────────────────────────────────────────────────────────────

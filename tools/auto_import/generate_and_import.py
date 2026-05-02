@@ -24,10 +24,13 @@ from pathlib import Path
 from PIL import Image
 from gradio_client import Client, handle_file
 
+from extract_icons import extract_icon
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = PROJECT_ROOT / "assets" / "models"
 REFERENCE_DIR = PROJECT_ROOT / "assets" / "reference"
+ICONS_DIR = PROJECT_ROOT / "assets" / "icons"
 DEFAULT_SERVER = "http://127.0.0.1:42003"
 
 NPX = shutil.which("npx") or "npx"
@@ -178,10 +181,15 @@ def main() -> int:
         else:
             shutil.copy(args.input, final_ref)
 
+    # Extract a UI icon from the reference sheet.
+    icon_src = final_ref if final_ref.exists() else args.input
+    final_icon = extract_icon(icon_src, args.name, ICONS_DIR)
+
     print()
     print("=== DONE ===", flush=True)
     print(f"  model:     {final_glb} ({final_glb.stat().st_size / 1024:.0f} KB)", flush=True)
     print(f"  reference: {final_ref}", flush=True)
+    print(f"  icon:      {final_icon}", flush=True)
     return 0
 
 

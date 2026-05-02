@@ -179,4 +179,5 @@ body {
 .prefab-card:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.22); }
 .prefab-card:active { cursor: grabbing; }
 .prefab-icon { font-size: 26px; display: block; }
+img.prefab-icon { width: 32px; height: 32px; object-fit: contain; }
 .prefab-name { font-size: 10px; color: #888; display: block; margin-top: 3px; }
