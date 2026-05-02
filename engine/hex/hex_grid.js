@@ -14,6 +14,18 @@ export class HexGrid {
     this.radius     = radius;
     this._occupied  = new Set();    // "q,r" keys
     this._entrances = new Map();    // "q,r" → [dq, dr] — only this neighbor can traverse the hex
+    this._occupancyListeners = new Set();
+  }
+
+  // Subscribe to occupancy changes (placement / destruction).
+  // Callback receives (q, r). Returns an unsubscribe function.
+  onOccupancyChanged(fn) {
+    this._occupancyListeners.add(fn);
+    return () => this._occupancyListeners.delete(fn);
+  }
+
+  _notifyOccupancy(q, r) {
+    for (const fn of this._occupancyListeners) fn(q, r);
   }
 
   // ── Coords ────────────────────────────────────────────────────────────────
@@ -76,8 +88,8 @@ export class HexGrid {
 
   // ── Occupancy ─────────────────────────────────────────────────────────────
   _key(q, r)         { return `${q},${r}`; }
-  occupy(q, r)       { this._occupied.add(this._key(q, r)); }
-  free(q, r)         { this._occupied.delete(this._key(q, r)); this._entrances.delete(this._key(q, r)); }
+  occupy(q, r)       { this._occupied.add(this._key(q, r)); this._notifyOccupancy(q, r); }
+  free(q, r)         { this._occupied.delete(this._key(q, r)); this._entrances.delete(this._key(q, r)); this._notifyOccupancy(q, r); }
   isOccupied(q, r)   { return this._occupied.has(this._key(q, r)); }
   isWalkable(q, r)   { return this.inBounds(q, r) && !this.isOccupied(q, r); }
 

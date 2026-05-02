@@ -40,6 +40,8 @@ export class GoToAction extends Action {
     this._stuckT = 0;
     this._lastX  = agent.gameObject.position.x;
     this._lastZ  = agent.gameObject.position.z;
+    this._unsubOccupancy = null;
+    this._hexPathKeys    = null;
     const target = this._getTarget();
     const mover  = agent.gameObject.getComponent(Mover);
     if (!target) { this._fail(agent, mover); return; }
@@ -68,6 +70,14 @@ export class GoToAction extends Action {
     const waypoints = smoothPath(grid, ant.position, path, edgeOverride);
     if (!waypoints || waypoints.length === 0) { this._fail(agent, mover); return; }
     mover.moveAlong(waypoints);
+
+    // Track hex cells along this path so we can invalidate if one becomes blocked.
+    this._hexPathKeys = new Set(path.map(h => `${h.q},${h.r}`));
+    this._unsubOccupancy = grid.onOccupancyChanged((q, r) => {
+      if (this._hexPathKeys.has(`${q},${r}`)) {
+        this._fail(agent, mover);
+      }
+    });
   }
 
   perform(agent, dt) {
@@ -93,8 +103,16 @@ export class GoToAction extends Action {
     return false;
   }
 
+  exit(_agent) {
+    this._unsubOccupancy?.();
+    this._unsubOccupancy = null;
+    this._hexPathKeys    = null;
+  }
+
   _fail(agent, mover) {
     this._failed = true;
+    this._unsubOccupancy?.();
+    this._unsubOccupancy = null;
     mover.arrived = true;
     this._onFailure?.();
     agent.invalidate();
