@@ -2,8 +2,9 @@ import { ResourceNode } from './components/resource_node.js';
 import { FarmPlot } from './components/farm_plot.js';
 
 // Per-target concurrent-worker caps. Resource nodes get 2 (multiple ants
-// share a sugar pile reasonably); farms get 1 (one watering is enough).
-const MAX_CLAIMS = { harvest: 2, tend: 1 };
+// share a sugar pile reasonably); farms get 1 per work kind (one watering
+// or one seed delivery at a time is enough).
+const MAX_CLAIMS = { harvest: 2, tend: 1, seed: 1 };
 
 // Central authority that hands out work. Tasks are derived from current
 // game state on demand (no separate task queue), so they can never go stale.
@@ -44,9 +45,14 @@ export class WorkManager {
       }
 
       const fp = go.getComponent(FarmPlot);
-      if (fp && fp.needsAttention() && used < MAX_CLAIMS.tend) {
-        const d = this._dist2(ant, go);
-        if (d < bestD) { best = { kind: 'tend', target: go }; bestD = d; }
+      if (fp) {
+        if (fp.needsSeed() && used < MAX_CLAIMS.seed) {
+          const d = this._dist2(ant, go);
+          if (d < bestD) { best = { kind: 'seed', target: go }; bestD = d; }
+        } else if (fp.needsAttention() && used < MAX_CLAIMS.tend) {
+          const d = this._dist2(ant, go);
+          if (d < bestD) { best = { kind: 'tend', target: go }; bestD = d; }
+        }
       }
     }
 
@@ -69,6 +75,10 @@ export class WorkManager {
     if (c.kind === 'tend') {
       const fp = c.target.getComponent(FarmPlot);
       return !!fp && fp.needsAttention();
+    }
+    if (c.kind === 'seed') {
+      const fp = c.target.getComponent(FarmPlot);
+      return !!fp && fp.needsSeed();
     }
     return false;
   }

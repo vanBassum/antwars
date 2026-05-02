@@ -8,6 +8,7 @@ import { ResourceNode } from './resource_node.js';
 import { HarvestTask } from './harvest_task.js';
 import { FarmPlot } from './farm_plot.js';
 import { TendTask } from './tend_task.js';
+import { SeedTask } from './seed_task.js';
 
 const SAMPLE_SPACING = 0.25;
 const WANDER_RADIUS  = 3;
@@ -170,6 +171,35 @@ class WaterFarmAction extends Action {
   }
 }
 
+// Hand off a seed to the picked farm — flips it from AWAITING_SEED to
+// GROWING. Same shape as WaterFarmAction, different verb.
+class DropSeedAction extends Action {
+  constructor(task, onSuccess, onFailure, preconditions, effects) {
+    super('DropSeed');
+    this._task         = task;
+    this._onSuccess    = onSuccess;
+    this._onFailure    = onFailure;
+    this._duration     = 0.4;
+    this.preconditions = preconditions;
+    this.effects       = effects;
+  }
+  enter(_agent) { this._t = 0; }
+  perform(agent, dt) {
+    this._t += dt;
+    if (this._t >= this._duration) {
+      if (!this._task.deliver()) {
+        this._onFailure?.();
+        agent.worldState.atFarm = false;
+        agent.invalidate();
+        return false;
+      }
+      this._onSuccess?.();
+      return true;
+    }
+    return false;
+  }
+}
+
 // Cycles between two kinds of work. Tasks are dispatched by the central
 // WorkManager (game.workManager): on each cycle boundary the worker
 // requests a fresh claim and routes it to either the harvest or tend
@@ -185,6 +215,7 @@ export class Worker extends Component {
     this._wm      = game.workManager;
     this._harvest = new HarvestTask();
     this._tend    = new TendTask();
+    this._seed    = new SeedTask();
     this._blob    = null;
     this._wanderTimer = null;
 
@@ -213,12 +244,12 @@ export class Worker extends Component {
           setCarrying(null);
           this._harvest.clear();
         }),
-      // Tend cycle
+      // Tend (water) cycle
       new WaitAction('TakeWater', 0.2,
         { atHive: true, hasWater: false },
         { hasWater: true },
         () => setCarrying('water')),
-      new GoToAction('GoToFarm', () => this._tend.target,
+      new GoToAction('GoToFarmForWater', () => this._tend.target,
         { atFarm: false, hasWater: true, farmAvailable: true },
         { atFarm: true, atResource: false, atHive: false }),
       new WaterFarmAction(this._tend,
@@ -226,19 +257,33 @@ export class Worker extends Component {
         onCycleFail,
         { atFarm: true, hasWater: true, farmAvailable: true },
         { hasWater: false, tended: true }),
+      // Seed-delivery cycle
+      new WaitAction('TakeSeed', 0.2,
+        { atHive: true, hasSeed: false },
+        { hasSeed: true },
+        () => setCarrying('seed')),
+      new GoToAction('GoToFarmForSeed', () => this._seed.target,
+        { atFarm: false, hasSeed: true, seedAvailable: true },
+        { atFarm: true, atResource: false, atHive: false }),
+      new DropSeedAction(this._seed,
+        () => { setCarrying(null); this._seed.clear(); },
+        onCycleFail,
+        { atFarm: true, hasSeed: true, seedAvailable: true },
+        { hasSeed: false, seeded: true }),
     ];
 
     const agent = this.gameObject.getComponent(GOAPAgent);
     agent.actions    = actions;
     agent.worldState = {
-      hasResource: false, hasWater: false,
+      hasResource: false, hasWater: false, hasSeed: false,
       atResource: false, atHive: false, atFarm: false,
-      delivered: false, tended: false,
-      resourceAvailable: false, farmAvailable: false,
+      delivered: false, tended: false, seeded: false,
+      resourceAvailable: false, farmAvailable: false, seedAvailable: false,
     };
     agent.onGoalReached = () => {
       agent.worldState.delivered = false;
       agent.worldState.tended    = false;
+      agent.worldState.seeded    = false;
       this._releaseClaim();   // cycle complete — free the slot for someone else
       this._pickNextCycle();
     };
@@ -267,11 +312,9 @@ export class Worker extends Component {
     const claim = this._wm?.request(this.gameObject) ?? null;
 
     if (!claim) {
-      // No work available. If we have leftover water and a farm exists,
-      // we'd still want to use it — but lack of claim means no farm needs
-      // attention. Fall through to unreachable goal so wander takes over.
       this._harvest.clear();
       this._tend.clear();
+      this._seed.clear();
       agent.goal = { delivered: true };
       return;
     }
@@ -280,11 +323,18 @@ export class Worker extends Component {
       this._harvest.target = claim.target;
       this._harvest.type   = claim.type;
       this._tend.clear();
+      this._seed.clear();
       agent.goal = { delivered: true };
-    } else {
+    } else if (claim.kind === 'tend') {
       this._tend.target = claim.target;
       this._harvest.clear();
+      this._seed.clear();
       agent.goal = { tended: true };
+    } else { // seed
+      this._seed.target = claim.target;
+      this._harvest.clear();
+      this._tend.clear();
+      agent.goal = { seeded: true };
     }
   }
 
@@ -297,19 +347,19 @@ export class Worker extends Component {
     if (!agent) return;
     const game = this.gameObject.game;
 
-    const r = game.gameObjects.some(g => g.getComponent(ResourceNode));
-    if (agent.worldState.resourceAvailable !== r) {
-      agent.worldState.resourceAvailable = r;
-      if (!r) agent.worldState.atResource = false;
-    }
-    const f = game.gameObjects.some(g => {
+    // Just keep the *availability* flags in sync. The atX location flags
+    // are owned by the GoTo action effects — actions reset them as the ant
+    // moves between zones, and onCycleFail clears atFarm explicitly when a
+    // farm-side action invalidates.
+    agent.worldState.resourceAvailable = game.gameObjects.some(g => g.getComponent(ResourceNode));
+    agent.worldState.farmAvailable     = game.gameObjects.some(g => {
       const fp = g.getComponent(FarmPlot);
       return fp && fp.needsAttention();
     });
-    if (agent.worldState.farmAvailable !== f) {
-      agent.worldState.farmAvailable = f;
-      if (!f) agent.worldState.atFarm = false;
-    }
+    agent.worldState.seedAvailable     = game.gameObjects.some(g => {
+      const fp = g.getComponent(FarmPlot);
+      return fp && fp.needsSeed();
+    });
   }
 
   update(dt) {
