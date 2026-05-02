@@ -54,7 +54,9 @@ export class GoToAction extends Action {
 
     const path = grid.findPath(from.q, from.r, goal.q, goal.r);
     if (!path) { this._fail(agent, mover); return; }
-    mover.moveAlong(smoothPath(grid, ant.position, path, edgeOverride));
+    const waypoints = smoothPath(grid, ant.position, path, edgeOverride);
+    if (!waypoints || waypoints.length === 0) { this._fail(agent, mover); return; }
+    mover.moveAlong(waypoints);
   }
 
   perform(agent, _dt) {
