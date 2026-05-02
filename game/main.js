@@ -12,6 +12,7 @@ import { ResourceBar } from './resource_bar.js';
 import { ActionBar } from './action_bar.js';
 import { PlacementController } from './placement_controller.js';
 import { ContextMenu } from './context_menu.js';
+import { WorkManager } from './work_manager.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -47,6 +48,9 @@ game.hexGrid  = hexGrid;
 const hexGridGO = new GameObject('HexGrid');
 hexGridGO.addComponent(new HexGridRenderer(hexGrid));
 game.add(hexGridGO);
+
+// Central work dispatcher — must exist before any Worker components start.
+game.workManager = new WorkManager(game);
 
 const res  = await fetch('assets/world/flat.json');
 const data = await res.json();
