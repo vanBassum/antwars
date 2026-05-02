@@ -2,6 +2,14 @@ import { Action } from '../action.js';
 import { Mover } from '../../../components/mover.js';
 import { smoothPath } from '../../../hex/smooth_path.js';
 
+// Watchdog: if the ant hasn't moved meaningfully for this many seconds while
+// the action is still "in progress", fail the trip so the planner re-picks.
+// Catches failure modes where the trip looks set-up but no movement happens —
+// path-smoother oddities, waypoints inside obstacles, mover stalls, etc.
+const STUCK_THRESHOLD_SECONDS = 3.0;
+const STUCK_DIST              = 0.1;
+const STUCK_DIST2             = STUCK_DIST * STUCK_DIST;
+
 // Generic "walk to a target gameObject" action.
 //
 // Constructor:
@@ -9,10 +17,10 @@ import { smoothPath } from '../../../hex/smooth_path.js';
 //   preconditions — GOAP preconditions
 //   effects       — GOAP effects (typically sets some `atX` flag)
 //   onFailure?    — called when the trip can't be set up (no target / no
-//                   walkable approach / no path). The action also flags
-//                   itself failed so perform() never returns true on the
-//                   trip — preventing GOAP from applying effects on a
-//                   trip that didn't actually happen.
+//                   walkable approach / no path) or when the watchdog fires.
+//                   The action also flags itself failed so perform() never
+//                   returns true on the trip — preventing GOAP from applying
+//                   effects on a trip that didn't actually happen.
 //
 // If the target's hex has an `entrance` registered on the grid, the ant
 // walks all the way to the target's hex center (e.g. into the hive).
@@ -29,6 +37,9 @@ export class GoToAction extends Action {
 
   enter(agent) {
     this._failed = false;
+    this._stuckT = 0;
+    this._lastX  = agent.gameObject.position.x;
+    this._lastZ  = agent.gameObject.position.z;
     const target = this._getTarget();
     const mover  = agent.gameObject.getComponent(Mover);
     if (!target) { this._fail(agent, mover); return; }
@@ -59,9 +70,27 @@ export class GoToAction extends Action {
     mover.moveAlong(waypoints);
   }
 
-  perform(agent, _dt) {
+  perform(agent, dt) {
     if (this._failed) return false; // never let a failed action complete
-    return agent.gameObject.getComponent(Mover).arrived;
+    const mover = agent.gameObject.getComponent(Mover);
+    if (mover.arrived) return true;
+
+    // Watchdog: if no meaningful movement for STUCK_THRESHOLD_SECONDS, fail.
+    const pos = agent.gameObject.position;
+    const dx  = pos.x - this._lastX;
+    const dz  = pos.z - this._lastZ;
+    if (dx * dx + dz * dz > STUCK_DIST2) {
+      this._lastX  = pos.x;
+      this._lastZ  = pos.z;
+      this._stuckT = 0;
+    } else {
+      this._stuckT += dt;
+      if (this._stuckT > STUCK_THRESHOLD_SECONDS) {
+        this._fail(agent, mover);
+        return false;
+      }
+    }
+    return false;
   }
 
   _fail(agent, mover) {
