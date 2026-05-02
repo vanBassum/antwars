@@ -28,14 +28,17 @@ export class PlacementController {
 
   get active() { return this._active; }
 
-  start(def, onCommit) {
+  start(def, onCommit, onCancel) {
     if (this._active) this._cancel();
     this._active   = true;
     this._def      = def;
     this._onCommit = onCommit;
+    this._onCancel = onCancel ?? null;
     this._buildGhost(def);
     document.body.style.cursor = 'crosshair';
   }
+
+  cancel() { this._cancel(); }
 
   _buildGhost(def) {
     const go = def.createObject();
@@ -112,6 +115,7 @@ export class PlacementController {
   }
 
   _cancel() {
+    const cb = this._onCancel;
     if (this._ghost) {
       this._game.scene.remove(this._ghost.object3D);
       this._ghost.destroy();
@@ -121,7 +125,9 @@ export class PlacementController {
     this._active   = false;
     this._def      = null;
     this._onCommit = null;
+    this._onCancel = null;
     document.body.style.cursor = '';
+    cb?.();
   }
 
   _raycastToHex(e) {

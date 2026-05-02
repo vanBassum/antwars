@@ -31,8 +31,31 @@ export class ActionBar {
       this._items.push({ btn, action });
     }
 
+    this._root      = root;
+    this._cancelBtn = null;
+
     parent.append(root);
     resources.onChange(v => this._refreshStates(v));
+  }
+
+  showCancel(onCancel) {
+    if (this._cancelBtn) return;
+    const btn = document.createElement('button');
+    btn.className = 'action-btn cancel-btn';
+    btn.title     = 'Cancel placement (Esc)';
+    btn.innerHTML = '<span class="action-icon">✕</span>';
+    btn.addEventListener('click', () => onCancel());
+    this._root.append(btn);
+    this._cancelBtn = btn;
+    for (const { btn: b } of this._items) b.disabled = true;
+  }
+
+  hideCancel() {
+    if (this._cancelBtn) {
+      this._cancelBtn.remove();
+      this._cancelBtn = null;
+    }
+    this._refreshStates(this._resources.values());
   }
 
   _tryActivate(action) {

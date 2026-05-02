@@ -82,29 +82,24 @@ new ContextMenu(game, { isBlocked: () => placement.active });
 const debugOverlay = new DebugOverlay(game, game.debug);
 game.onTick = () => debugOverlay.tick();
 
-function startFarmPlacement(commit) {
-  const def = ENTITY_DEFS.find(d => d.id === 'farm_plot');
+function startPlacement(defId, commit) {
+  const def = ENTITY_DEFS.find(d => d.id === defId);
   if (!def) return;
-  placement.start(def, commit);
-}
-
-function startTrainingHutPlacement(commit) {
-  const def = ENTITY_DEFS.find(d => d.id === 'training_hut');
-  if (!def) return;
-  placement.start(def, commit);
+  actionBar.showCancel(() => placement.cancel());
+  placement.start(def, commit, () => actionBar.hideCancel());
 }
 
 // Worker ants are no longer spawned directly from the ActionBar — they come
 // from the Queen → egg → Training Hut loop. The "Train Worker" button on the
 // Training Hut's context menu queues the request.
-new ActionBar(game.resources, [
+const actionBar = new ActionBar(game.resources, [
   {
     icon:      '🌱',
     iconUrl:   'assets/icons/FarmPlot.png',
     label:     'Farm Plot',
     costLabel: '10 🪵',
     cost:      { wood: 10 },
-    onActivate: startFarmPlacement,
+    onActivate: (commit) => startPlacement('farm_plot', commit),
   },
   {
     icon:      '🏠',
@@ -112,7 +107,7 @@ new ActionBar(game.resources, [
     label:     'Training Hut',
     costLabel: '10 🪵',
     cost:      { wood: 10 },
-    onActivate: startTrainingHutPlacement,
+    onActivate: (commit) => startPlacement('training_hut', commit),
   },
 ]);
 
