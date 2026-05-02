@@ -5,9 +5,7 @@ import { GoToAction } from '../../engine/ai/goap/actions/go_to_action.js';
 import { smoothPath } from '../../engine/hex/smooth_path.js';
 import { cloneModel } from '../../engine/model_cache.js';
 
-import { ResourceNode } from './resource_node.js';
 import { HarvestTask } from './harvest_task.js';
-import { FarmPlot } from './farm_plot.js';
 import { TendTask } from './tend_task.js';
 import { SeedTask } from './seed_task.js';
 
@@ -164,20 +162,17 @@ export class Worker extends Component {
   }
 
   // ── Per-frame ──────────────────────────────────────────────────────────
+  // Refresh the GOAP availability flags. We let WorkManager do the
+  // heavy lifting — its cached by-component lists are dirty only when
+  // entities are added/removed, so the per-frame cost is "filter a small
+  // pre-built list" instead of "walk every gameObject in the scene".
   _refreshAvailability() {
     const agent = this.gameObject.getComponent(GOAPAgent);
-    if (!agent) return;
-    const game = this.gameObject.game;
+    if (!agent || !this._wm) return;
 
-    agent.worldState.resourceAvailable = game.gameObjects.some(g => g.getComponent(ResourceNode));
-    agent.worldState.farmAvailable     = game.gameObjects.some(g => {
-      const fp = g.getComponent(FarmPlot);
-      return fp && fp.needsAttention();
-    });
-    agent.worldState.seedAvailable     = game.gameObjects.some(g => {
-      const fp = g.getComponent(FarmPlot);
-      return fp && fp.needsSeed();
-    });
+    agent.worldState.resourceAvailable = this._wm.resourceAvailable();
+    agent.worldState.farmAvailable     = this._wm.farmAvailable();
+    agent.worldState.seedAvailable     = this._wm.seedAvailable();
   }
 
   update(dt) {

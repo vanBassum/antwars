@@ -3,13 +3,27 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 export class Game {
   constructor({ container = document.body } = {}) {
-    this.gameObjects = [];
-    this._lastTime   = 0;
-    this.camera      = null;
-    this._container  = container;
+    this.gameObjects     = [];
+    this._lastTime       = 0;
+    this.camera          = null;
+    this._container      = container;
+    this._sceneListeners = new Set();
 
     this._initRenderer();
     this._initScene();
+  }
+
+  // Multi-listener scene-change subscription. New code should use this.
+  // The legacy `game.onSceneChange = fn` single-callback still fires too.
+  // Returns an unsubscribe function.
+  addSceneListener(fn) {
+    this._sceneListeners.add(fn);
+    return () => this._sceneListeners.delete(fn);
+  }
+
+  _notifySceneChange() {
+    this._notifySceneChange();
+    for (const fn of this._sceneListeners) fn();
   }
 
   _initRenderer() {
@@ -53,7 +67,7 @@ export class Game {
     this.gameObjects.push(gameObject);
     this.scene.add(gameObject.object3D);
     gameObject.start();
-    this.onSceneChange?.();
+    this._notifySceneChange();
     return gameObject;
   }
 
@@ -61,7 +75,7 @@ export class Game {
     this.gameObjects = this.gameObjects.filter(g => g !== gameObject);
     this.scene.remove(gameObject.object3D);
     gameObject.destroy();
-    this.onSceneChange?.();
+    this._notifySceneChange();
   }
 
   start() {
