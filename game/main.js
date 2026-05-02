@@ -13,15 +13,30 @@ import { ActionBar } from './action_bar.js';
 import { PlacementController } from './placement_controller.js';
 import { ContextMenu } from './context_menu.js';
 import { WorkManager } from './work_manager.js';
+import { DebugMode } from './debug.js';
+import { DebugOverlay } from './debug_overlay.js';
 
 const game = new Game();
 game.resources = new Resources();
 game.resources.set('sugar', 10);
 game.resources.set('wood',  10);
+game.debug     = new DebugMode();
 new ResourceBar(game.resources, [
   { key: 'sugar', icon: '🍬', iconUrl: 'assets/icons/SugarNode.png', label: 'Sugar' },
   { key: 'wood',  icon: '🪵', iconUrl: 'assets/icons/Branch.png',    label: 'Wood' },
-]);
+], { debug: game.debug });
+
+// Debug toggle button (top-left). Click or F3 toggles.
+const debugBtn = document.createElement('button');
+debugBtn.className   = 'debug-toggle';
+debugBtn.textContent = '🐞';
+debugBtn.title       = 'Toggle debug mode (F3)';
+debugBtn.addEventListener('click', () => game.debug.toggle());
+document.body.append(debugBtn);
+game.debug.onChange(on => debugBtn.classList.toggle('active', on));
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'F3') { e.preventDefault(); game.debug.toggle(); }
+});
 
 const camera = new GameObject('Camera');
 camera.addComponent(new CameraRig());
@@ -61,6 +76,10 @@ new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
 
 const placement = new PlacementController(game);
 new ContextMenu(game, { isBlocked: () => placement.active });
+
+// Per-frame debug labels above any gameObject exposing getDebugInfo().
+const debugOverlay = new DebugOverlay(game, game.debug);
+game.onTick = () => debugOverlay.tick();
 
 function spawnWorkerAnt(commit) {
   const def  = ENTITY_DEFS.find(d => d.id === 'ant');

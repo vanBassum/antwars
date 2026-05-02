@@ -449,6 +449,25 @@ export class Worker extends Component {
     this._releaseClaim();
   }
 
+  // Consumed by DebugOverlay when debug mode is on.
+  getDebugInfo() {
+    const agent = this.gameObject.getComponent(GOAPAgent);
+    const ws    = agent?.worldState ?? {};
+    const task  = agent?.currentActionName ?? 'idle';
+
+    let target = '—';
+    if (this._harvest.target) target = this._harvest.target.name ?? 'resource';
+    else if (this._tend.target) target = this._tend.target.name ?? 'farm';
+    else if (this._seed.target) target = this._seed.target.name ?? 'farm';
+
+    let carrying = 'empty';
+    if (ws.hasResource && this._harvest.type) carrying = this._harvest.type;
+    else if (ws.hasWater)                     carrying = 'water';
+    else if (ws.hasSeed)                      carrying = 'seed';
+
+    return { task, target, carrying };
+  }
+
   _pickWanderTarget() {
     const game = this.gameObject.game;
     const grid = game.hexGrid;
