@@ -1,6 +1,9 @@
 // Bottom-of-screen hotbar of square buttons. Each action takes:
 //   { icon, label, costLabel, cost: { resourceKey: amount }, onActivate }
-// onActivate may return false to abort and refund the cost.
+// onActivate is called as `onActivate(commit)` — the action invokes
+// `commit()` when it actually wants the cost deducted. This lets async
+// flows (e.g. enter placement mode, wait for click) commit on success
+// and skip on cancel.
 export class ActionBar {
   constructor(resources, actions, parent = document.body) {
     this._resources = resources;
@@ -34,11 +37,15 @@ export class ActionBar {
 
   _tryActivate(action) {
     if (!this._canAfford(action.cost)) return;
-    const ok = action.onActivate?.();
-    if (ok === false) return;
-    for (const [k, v] of Object.entries(action.cost ?? {})) {
-      this._resources.add(k, -v);
-    }
+    let committed = false;
+    const commit = () => {
+      if (committed) return;
+      committed = true;
+      for (const [k, v] of Object.entries(action.cost ?? {})) {
+        this._resources.add(k, -v);
+      }
+    };
+    action.onActivate?.(commit);
   }
 
   _canAfford(cost) {

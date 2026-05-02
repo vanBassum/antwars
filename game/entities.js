@@ -5,6 +5,7 @@ import { Mover } from '../engine/components/mover.js';
 import { GOAPAgent } from '../engine/ai/goap/goap_agent.js';
 import { ResourceNode } from './components/resource_node.js';
 import { Worker } from './components/worker.js';
+import { FarmPlot } from './components/farm_plot.js';
 
 export const ENTITY_DEFS = [
   new EntityDef({
@@ -43,6 +44,16 @@ export const ENTITY_DEFS = [
       const go = new GameObject('Bush');
       go.object3D.add(cloneModel(this.modelUrl));
       go.addComponent(new ResourceNode({ type: 'wood', amount: 25 }));
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'farm_plot', name: 'Farm Plot', icon: '🌱', yOffset: 0, occupiesHex: true,
+    modelUrl: 'assets/models/FarmPlot.glb',
+    createObject() {
+      const go = new GameObject('Farm Plot');
+      go.object3D.add(cloneModel(this.modelUrl));
+      go.addComponent(new FarmPlot());
       return go;
     },
   }),

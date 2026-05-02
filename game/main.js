@@ -10,6 +10,8 @@ import { HexGridRenderer } from '../engine/components/hex_grid_renderer.js';
 import { Resources } from '../engine/resources.js';
 import { ResourceBar } from './resource_bar.js';
 import { ActionBar } from './action_bar.js';
+import { PlacementController } from './placement_controller.js';
+import { FarmHoverMenu } from './farm_hover_menu.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -48,17 +50,26 @@ const res  = await fetch('assets/world/flat.json');
 const data = await res.json();
 new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
 
-function spawnWorkerAnt() {
+const placement = new PlacementController(game);
+new FarmHoverMenu(game);
+
+function spawnWorkerAnt(commit) {
   const def  = ENTITY_DEFS.find(d => d.id === 'ant');
   const hive = game.gameObjects.find(g => g.name === 'Ant Hill');
-  if (!def || !hive) return false;
+  if (!def || !hive) return;
 
   // Spawn inside the hive — A* will route the first path out through the
   // entrance neighbor, so the ant visibly walks out the door.
   const go = def.createObject();
   go.object3D.position.copy(hive.object3D.position);
   game.add(go);
-  return true;
+  commit();
+}
+
+function startFarmPlacement(commit) {
+  const def = ENTITY_DEFS.find(d => d.id === 'farm_plot');
+  if (!def) return;
+  placement.start(def, commit);
 }
 
 new ActionBar(game.resources, [
@@ -68,6 +79,13 @@ new ActionBar(game.resources, [
     costLabel: '5 🍬',
     cost:      { sugar: 5 },
     onActivate: spawnWorkerAnt,
+  },
+  {
+    icon:      '🌱',
+    label:     'Farm Plot',
+    costLabel: '10 🪵',
+    cost:      { wood: 10 },
+    onActivate: startFarmPlacement,
   },
 ]);
 
