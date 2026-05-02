@@ -11,11 +11,18 @@ export class Mover extends Component {
     this._target = null;
     this._path   = []; // remaining waypoints after _target
     this.arrived = true;
+    // Per-mover lateral offset (world units) applied to every waypoint.
+    // Lets each ant follow its own slightly-different track so two ants
+    // on the same path don't visually walk on top of each other. Workers
+    // pick their own small random offset on start; everything else
+    // defaults to 0 (no offset).
+    this.pathOffsetX = 0;
+    this.pathOffsetZ = 0;
   }
 
   moveTo(position) {
     this._path   = [];
-    this._target = { x: position.x, z: position.z };
+    this._target = { x: position.x + this.pathOffsetX, z: position.z + this.pathOffsetZ };
     this.arrived = false;
   }
 
@@ -27,8 +34,11 @@ export class Mover extends Component {
       this.arrived = true;
       return;
     }
-    this._target = { x: waypoints[0].x, z: waypoints[0].z };
-    this._path   = waypoints.slice(1).map(p => ({ x: p.x, z: p.z }));
+    this._target = { x: waypoints[0].x + this.pathOffsetX, z: waypoints[0].z + this.pathOffsetZ };
+    this._path   = waypoints.slice(1).map(p => ({
+      x: p.x + this.pathOffsetX,
+      z: p.z + this.pathOffsetZ,
+    }));
     this.arrived = false;
   }
 

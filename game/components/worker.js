@@ -53,6 +53,17 @@ export class Worker extends Component {
     this._blob    = null;
     this._wanderTimer = null;
 
+    // Per-ant lateral path offset — picked once, in a small ring around
+    // the path centerline. Two ants on the same path won't overlap
+    // visually because each follows its own offset track.
+    const mover = this.gameObject.getComponent(Mover);
+    if (mover) {
+      const ang = Math.random() * Math.PI * 2;
+      const r   = 0.10 + Math.random() * 0.10;
+      mover.pathOffsetX = Math.cos(ang) * r;
+      mover.pathOffsetZ = Math.sin(ang) * r;
+    }
+
     const setCarrying = (type) => this._setCarrying(type);
     // Any failure mid-cycle: clear everything cleanly and re-pick. This is
     // what prevents stuck ants — without it the planner would re-plan the
