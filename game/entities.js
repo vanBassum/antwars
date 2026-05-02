@@ -79,8 +79,22 @@ export const ENTITY_DEFS = [
     modelUrl: 'assets/models/Ant.glb',
     createObject() {
       const go = new GameObject('Queen');
+      // Re-use the worker Ant model but scale her up clearly so she's
+      // distinguishable from regular workers (workers spawn at 0.25).
       const model = cloneModel(this.modelUrl);
-      model.scale.setScalar(0.3);
+      model.scale.setScalar(0.55);
+      // Tint a warm gold so she pops against the brown ants.
+      model.traverse(obj => {
+        if (!obj.isMesh || !obj.material) return;
+        const mats   = Array.isArray(obj.material) ? obj.material : [obj.material];
+        const tinted = mats.map(m => {
+          if (!m.color) return m;
+          const c = m.clone();
+          c.color.setHex(0xd4a017);
+          return c;
+        });
+        obj.material = Array.isArray(obj.material) ? tinted : tinted[0];
+      });
       go.object3D.add(model);
       go.addComponent(new Mover(1.0));
       go.addComponent(new Queen());

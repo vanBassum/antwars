@@ -82,19 +82,6 @@ new ContextMenu(game, { isBlocked: () => placement.active });
 const debugOverlay = new DebugOverlay(game, game.debug);
 game.onTick = () => debugOverlay.tick();
 
-function spawnWorkerAnt(commit) {
-  const def  = ENTITY_DEFS.find(d => d.id === 'ant');
-  const hive = game.gameObjects.find(g => g.name === 'Ant Hill');
-  if (!def || !hive) return;
-
-  // Spawn inside the hive — A* will route the first path out through the
-  // entrance neighbor, so the ant visibly walks out the door.
-  const go = def.createObject();
-  go.object3D.position.copy(hive.object3D.position);
-  game.add(go);
-  commit();
-}
-
 function startFarmPlacement(commit) {
   const def = ENTITY_DEFS.find(d => d.id === 'farm_plot');
   if (!def) return;
@@ -107,15 +94,10 @@ function startTrainingHutPlacement(commit) {
   placement.start(def, commit);
 }
 
+// Worker ants are no longer spawned directly from the ActionBar — they come
+// from the Queen → egg → Training Hut loop. The "Train Worker" button on the
+// Training Hut's context menu queues the request.
 new ActionBar(game.resources, [
-  {
-    icon:      '🐜',
-    iconUrl:   'assets/icons/Ant.png',
-    label:     'Worker Ant',
-    costLabel: '5 🍬',
-    cost:      { sugar: 5 },
-    onActivate: spawnWorkerAnt,
-  },
   {
     icon:      '🌱',
     iconUrl:   'assets/icons/FarmPlot.png',
