@@ -11,7 +11,7 @@ const UPDATE_MS = 200;
 //   {
 //     title:    string,
 //     state:    string,                                       // optional
-//     progress: { label, value (0..1), text },                // optional
+//     progress: { label, value (0..1), text } | [{...}],      // optional, single or array
 //     actions:  [{ icon, label, selected?, onClick }],        // optional
 //   }
 //
@@ -139,17 +139,19 @@ export class ContextMenu {
       this._menu.append(el);
     }
     if (data.progress) {
-      const p = data.progress;
-      const row   = document.createElement('div'); row.className   = 'context-menu-progress';
-      const label = document.createElement('span'); label.className = 'progress-label'; label.textContent = p.label;
-      const bar   = document.createElement('div');  bar.className   = 'progress-bar';
-      const fill  = document.createElement('div');  fill.className  = 'progress-fill';
-      fill.style.width = `${Math.max(0, Math.min(1, p.value)) * 100}%`;
-      bar.append(fill);
-      const text = document.createElement('span'); text.className = 'progress-text';
-      text.textContent = p.text ?? `${Math.round(p.value * 100)}%`;
-      row.append(label, bar, text);
-      this._menu.append(row);
+      const items = Array.isArray(data.progress) ? data.progress : [data.progress];
+      for (const p of items) {
+        const row   = document.createElement('div'); row.className   = 'context-menu-progress';
+        const label = document.createElement('span'); label.className = 'progress-label'; label.textContent = p.label;
+        const bar   = document.createElement('div');  bar.className   = 'progress-bar';
+        const fill  = document.createElement('div');  fill.className  = 'progress-fill';
+        fill.style.width = `${Math.max(0, Math.min(1, p.value)) * 100}%`;
+        bar.append(fill);
+        const text = document.createElement('span'); text.className = 'progress-text';
+        text.textContent = p.text ?? `${Math.round(p.value * 100)}%`;
+        row.append(label, bar, text);
+        this._menu.append(row);
+      }
     }
     if (data.actions?.length) {
       for (const action of data.actions) {
