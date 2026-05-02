@@ -37,6 +37,7 @@ await Promise.all([
   loadModel('assets/models/SugarBlob.glb'),
   loadModel('assets/models/WaterDroplet.glb'),
   loadModel('assets/models/Branch.glb'),
+  loadModel('assets/models/Seed.glb'),
   // Crop visuals spawned by FarmPlot when growing.
   loadModel('assets/models/BerryBush.glb'),
 ]);
