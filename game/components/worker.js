@@ -16,6 +16,7 @@ const WANDER_RADIUS  = 3;
 // state still tracked).
 const CARRY_MODELS = {
   sugar: 'assets/models/SugarBlob.glb',
+  wood:  'assets/models/Branch.glb',
   water: 'assets/models/WaterDroplet.glb',
 };
 
