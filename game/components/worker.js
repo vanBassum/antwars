@@ -9,11 +9,13 @@ import { HarvestTask } from './harvest_task.js';
 import { TendTask } from './tend_task.js';
 import { SeedTask } from './seed_task.js';
 import { DeliverEggTask } from './deliver_egg_task.js';
+import { DeliverSugarTask } from './deliver_sugar_task.js';
 
 import { buildHarvestActions, HARVEST_GOAL } from '../cycles/harvest_cycle.js';
 import { buildTendActions,    TEND_GOAL    } from '../cycles/tend_cycle.js';
 import { buildSeedActions,    SEED_GOAL    } from '../cycles/seed_cycle.js';
 import { buildDeliverEggActions, DELIVER_EGG_GOAL } from '../cycles/deliver_egg_cycle.js';
+import { buildRestockActions, RESTOCK_GOAL } from '../cycles/restock_cycle.js';
 
 const WANDER_RADIUS = 3;
 
@@ -50,6 +52,7 @@ export class Worker extends Component {
     this._tend    = new TendTask();
     this._seed    = new SeedTask();
     this._egg     = new DeliverEggTask();
+    this._restock = new DeliverSugarTask();
     this._blob    = null;
     this._wanderTimer = null;
 
@@ -84,21 +87,25 @@ export class Worker extends Component {
       ...buildTendActions   ({ task: this._tend,    setCarrying, onCycleFail }),
       ...buildSeedActions   ({ task: this._seed,    setCarrying, onCycleFail }),
       ...buildDeliverEggActions({ task: this._egg,  setCarrying, onCycleFail }),
+      ...buildRestockActions({ task: this._restock, game, hiveGO, setCarrying, onCycleFail }),
     ];
 
     const agent = this.gameObject.getComponent(GOAPAgent);
     agent.actions    = actions;
     agent.worldState = {
-      hasResource: false, hasWater: false, hasSeed: false, hasEgg: false,
+      hasResource: false, hasWater: false, hasSeed: false, hasEgg: false, hasSugar: false,
       atResource: false, atHive: false, atFarm: false, atEgg: false, atTrainingHut: false,
-      delivered: false, tended: false, seeded: false, eggDelivered: false,
+      atSugarSource: false, atTray: false,
+      delivered: false, tended: false, seeded: false, eggDelivered: false, sugarDelivered: false,
       resourceAvailable: false, farmAvailable: false, seedAvailable: false, eggAvailable: false,
+      restockAvailable: false,
     };
     agent.onGoalReached = () => {
       agent.worldState.delivered    = false;
       agent.worldState.tended       = false;
       agent.worldState.seeded       = false;
-      agent.worldState.eggDelivered = false;
+      agent.worldState.eggDelivered   = false;
+      agent.worldState.sugarDelivered = false;
       this._releaseClaim();
       this._pickNextCycle();
     };
@@ -130,6 +137,7 @@ export class Worker extends Component {
       this._tend.clear();
       this._seed.clear();
       this._egg.clear();
+      this._restock.clear();
       agent.goal = HARVEST_GOAL; // unreachable without resources — wander takes over
       return;
     }
@@ -140,12 +148,14 @@ export class Worker extends Component {
       this._tend.clear();
       this._seed.clear();
       this._egg.clear();
+      this._restock.clear();
       agent.goal = HARVEST_GOAL;
     } else if (claim.kind === 'tend') {
       this._tend.target = claim.target;
       this._harvest.clear();
       this._seed.clear();
       this._egg.clear();
+      this._restock.clear();
       agent.goal = TEND_GOAL;
     } else if (claim.kind === 'egg') {
       this._egg.egg         = claim.target;
@@ -153,12 +163,23 @@ export class Worker extends Component {
       this._harvest.clear();
       this._tend.clear();
       this._seed.clear();
+      this._restock.clear();
       agent.goal = DELIVER_EGG_GOAL;
+    } else if (claim.kind === 'restock') {
+      this._restock.tray   = claim.target;
+      this._restock.source = claim.source;
+      this._restock._useStockpile = !claim.source;
+      this._harvest.clear();
+      this._tend.clear();
+      this._seed.clear();
+      this._egg.clear();
+      agent.goal = RESTOCK_GOAL;
     } else { // seed
       this._seed.target = claim.target;
       this._harvest.clear();
       this._tend.clear();
       this._egg.clear();
+      this._restock.clear();
       agent.goal = SEED_GOAL;
     }
   }
@@ -182,10 +203,12 @@ export class Worker extends Component {
     this._tend.clear();
     this._seed.clear();
     this._egg.clear();
+    this._restock.clear();
     if (!agent.worldState.hasResource) {
       agent.worldState.hasWater = false;
       agent.worldState.hasSeed  = false;
       agent.worldState.hasEgg   = false;
+      agent.worldState.hasSugar = false;
       this._setCarrying(null);
     }
     agent.invalidate();
@@ -205,6 +228,7 @@ export class Worker extends Component {
     agent.worldState.farmAvailable     = this._wm.farmAvailable();
     agent.worldState.seedAvailable     = this._wm.seedAvailable();
     agent.worldState.eggAvailable      = this._wm.eggAvailable();
+    agent.worldState.restockAvailable  = this._wm.restockAvailable();
   }
 
   update(dt) {
@@ -221,7 +245,8 @@ export class Worker extends Component {
     if ((this._harvest.hasTarget() && !this._harvest.isStillValid()) ||
         (this._tend.hasTarget()    && !this._tend.isStillValid())    ||
         (this._seed.hasTarget()    && !this._seed.isStillValid())    ||
-        (this._egg.hasTarget()     && !this._egg.isStillValid())) {
+        (this._egg.hasTarget()     && !this._egg.isStillValid())    ||
+        (this._restock.hasTarget() && !this._restock.isStillValid())) {
       this._abandonCycle();
     }
 
@@ -267,12 +292,14 @@ export class Worker extends Component {
     else if (this._tend.target)    target = this._tend.target.name    ?? 'farm';
     else if (this._seed.target)    target = this._seed.target.name    ?? 'farm';
     else if (this._egg.egg)        target = 'egg → training hut';
+    else if (this._restock.tray)   target = 'sugar → feeding tray';
 
     let carrying = 'empty';
     if (ws.hasResource && this._harvest.type) carrying = this._harvest.type;
     else if (ws.hasWater)                     carrying = 'water';
     else if (ws.hasSeed)                      carrying = 'seed';
     else if (ws.hasEgg)                       carrying = 'egg';
+    else if (ws.hasSugar)                     carrying = 'sugar (restock)';
 
     return { task, target, carrying };
   }

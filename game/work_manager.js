@@ -2,11 +2,12 @@ import { ResourceNode } from './components/resource_node.js';
 import { FarmPlot } from './components/farm_plot.js';
 import { EggPickup } from './components/egg_pickup.js';
 import { TrainingHut } from './components/training_hut.js';
+import { FeedingTray } from './components/feeding_tray.js';
 
 // Per-target concurrent-worker caps. Resource nodes get 2 (multiple ants
 // share a sugar pile reasonably); farms get 1 per work kind (one watering
 // or one seed delivery at a time is enough).
-const MAX_CLAIMS = { harvest: 2, tend: 1, seed: 1, egg: 1 };
+const MAX_CLAIMS = { harvest: 2, tend: 1, seed: 1, egg: 1, restock: 1 };
 
 // Global egg cap: fieldEggs + inTransitEggs.
 const EGG_CAP = 10;
@@ -56,6 +57,7 @@ export class WorkManager {
     this._farmPlots     = []; // gameObjects with a FarmPlot component
     this._looseEggs     = []; // gameObjects with an EggPickup component
     this._trainingHuts  = []; // gameObjects with a TrainingHut component
+    this._feedingTrays  = []; // gameObjects with a FeedingTray component
 
     // Registered workers — workers add/remove themselves so we can preempt
     // them without importing the Worker class (avoids circular deps).
@@ -129,6 +131,33 @@ export class WorkManager {
       }
     }
 
+    // Restock: feeding trays that need sugar. Try to find a nearby sugar
+    // ResourceNode first; fall back to the Anthill stockpile.
+    for (const go of this._feedingTrays) {
+      const ft = go.getComponent(FeedingTray);
+      if (!ft || !ft.needsSugar()) continue;
+      if ((counts.get(go) ?? 0) >= MAX_CLAIMS.restock) continue;
+
+      // Find nearest reachable sugar ResourceNode.
+      let sugarSource = null, bestSourceD = Infinity;
+      for (const rn of this._resourceNodes) {
+        const rnc = rn.getComponent(ResourceNode);
+        if (!rnc || rnc.isEmpty || rnc.type !== 'sugar') continue;
+        const d = this._dist2(ant, rn);
+        if (d < bestSourceD) { sugarSource = rn; bestSourceD = d; }
+      }
+
+      // Stockpile fallback: need at least 1 sugar in reserves.
+      const hasStockpile = !sugarSource && (this._game.resources?.get('sugar') ?? 0) > 0;
+      if (!sugarSource && !hasStockpile) continue;
+
+      const score = this._fairScore(ant, go, 'restock', now);
+      if (score < bestScore) {
+        best = { kind: 'restock', target: go, source: sugarSource ?? null };
+        bestScore = score;
+      }
+    }
+
     if (best) this._claims.set(ant, best);
     return best;
   }
@@ -159,6 +188,10 @@ export class WorkManager {
     if (c.kind === 'egg') {
       return !!c.target.getComponent(EggPickup);
     }
+    if (c.kind === 'restock') {
+      const ft = c.target.getComponent(FeedingTray);
+      return !!ft && ft.needsSugar();
+    }
     return false;
   }
 
@@ -188,6 +221,14 @@ export class WorkManager {
     for (const go of this._farmPlots) {
       const fp = go.getComponent(FarmPlot);
       if (fp && fp.needsSeed()) return true;
+    }
+    return false;
+  }
+  restockAvailable() {
+    this._refreshCaches();
+    for (const go of this._feedingTrays) {
+      const ft = go.getComponent(FeedingTray);
+      if (ft && ft.needsSugar()) return true;
     }
     return false;
   }
@@ -245,11 +286,13 @@ export class WorkManager {
     this._farmPlots     = [];
     this._looseEggs     = [];
     this._trainingHuts  = [];
+    this._feedingTrays  = [];
     for (const go of this._game.gameObjects) {
       if (go.getComponent(ResourceNode)) this._resourceNodes.push(go);
       if (go.getComponent(FarmPlot))     this._farmPlots.push(go);
       if (go.getComponent(EggPickup))    this._looseEggs.push(go);
       if (go.getComponent(TrainingHut))  this._trainingHuts.push(go);
+      if (go.getComponent(FeedingTray))  this._feedingTrays.push(go);
     }
     this._dirty = false;
   }
@@ -299,6 +342,12 @@ export class WorkManager {
 
     for (const go of this._looseEggs) {
       mark(go, 'egg');
+    }
+
+    for (const go of this._feedingTrays) {
+      const ft = go.getComponent(FeedingTray);
+      if (ft && ft.needsSugar()) mark(go, 'restock');
+      else clear(go, 'restock');
     }
 
     // Prune entries for removed gameObjects.
