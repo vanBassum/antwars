@@ -9,3 +9,6 @@ Thumbs.db
 
 # Reference sheets used to generate models — large, regeneratable inputs
 assets/reference/
+
+# Python bytecode cache from auto_import scripts
+__pycache__/
