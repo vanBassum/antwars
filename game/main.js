@@ -77,8 +77,14 @@ game.add(hexGridGO);
 // Central work dispatcher — must exist before any Worker components start.
 game.workManager = new WorkManager(game);
 
-const res  = await fetch('assets/world/flat.json');
+// World file is normally `flat.json`; `?world=<name>` lets perf benchmarks
+// load alternate scenes (e.g. `?world=stress.flat.json`) without rebuilding.
+const worldFile = new URLSearchParams(location.search).get('world') || 'flat.json';
+const res  = await fetch(`assets/world/${worldFile}`);
 const data = await res.json();
+if (data.resources) {
+  for (const [key, value] of Object.entries(data.resources)) game.resources.set(key, value);
+}
 new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
 
 const placement = new PlacementController(game);
