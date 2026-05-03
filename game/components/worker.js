@@ -129,6 +129,13 @@ export class Worker extends Component {
     const agent = this.gameObject.getComponent(GOAPAgent);
     if (!agent) return;
 
+    // Refresh availability flags before picking + planning so the worldState
+    // the planner sees on its next tick reflects what just changed (e.g. a
+    // ConstructionSite that was placed this very tick must show up in
+    // constructAvailable, otherwise the first plan attempt fails because
+    // TakeMaterial's precondition isn't met and we eat a 2s retry timer).
+    this._refreshAvailability();
+
     // Already carrying a gathered resource → finish the delivery; no new
     // claim needed (and the harvest task still holds the type).
     if (agent.worldState.hasResource) {

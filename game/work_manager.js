@@ -18,9 +18,6 @@ const EGG_CAP = 10;
 // tasks get prioritised more aggressively over nearer ones.
 const FAIRNESS_K = 0.3;
 
-// Player-requested tasks (egg delivery, future construction) get a score
-// divisor so they reliably beat ambient work (harvest/tend) at cycle boundaries.
-const PLAYER_TASK_BOOST = 10;
 
 // Central authority that hands out work. Tasks are derived from current
 // game state on demand (no separate task queue), so they can never go stale.
@@ -83,7 +80,66 @@ export class WorkManager {
       counts.set(c.target, (counts.get(c.target) ?? 0) + 1);
     }
 
-    let best = null, bestScore = Infinity;
+    // Two-tier dispatch: player-driven tasks (egg delivery, construction) win
+    // over ambient gathering whenever any are available. Within a tier we use
+    // distance/age fairness. The tier separation is necessary because the
+    // age-based fairness denominator quickly dwarfs any score multiplier —
+    // a sugar node that's been eligible for 5 minutes scores ~0.2 while a
+    // brand-new construction site scores ~16, so a flat boost can't beat it.
+    let priorityBest = null, priorityScore = Infinity;
+    let ambientBest  = null, ambientScore  = Infinity;
+
+    // ── PRIORITY: egg delivery ────────────────────────────────────────────
+    // Only dispatch when a training hut has pending requests AND we don't
+    // already have enough eggs in transit to satisfy them. Without this cap,
+    // multiple preempted workers each grab an egg for the same single queue
+    // slot — only one gets delivered, the rest are wasted.
+    const hutWithRequest = this._nearestTrainingHut(ant);
+    if (hutWithRequest) {
+      let totalRequests = 0;
+      for (const go of this._trainingHuts) {
+        const th = go.getComponent(TrainingHut);
+        if (th) totalRequests += th.queueLength;
+      }
+      let inFlightEggs = 0;
+      for (const c of this._claims.values()) {
+        if (c.kind === 'egg') inFlightEggs++;
+      }
+      if (inFlightEggs < totalRequests) {
+        for (const go of this._looseEggs) {
+          if ((counts.get(go) ?? 0) >= MAX_CLAIMS.egg) continue;
+          const score = this._fairScore(ant, go, 'egg', now);
+          if (score < priorityScore) { priorityBest = { kind: 'egg', target: go, trainingHut: hutWithRequest }; priorityScore = score; }
+        }
+      }
+    }
+
+    // ── PRIORITY: construction sites that still need a material the player
+    // currently has in stockpile. Workers always source from the hive.
+    for (const go of this._constructionSites) {
+      const cs = go.getComponent(ConstructionSite);
+      if (!cs || cs.isComplete()) continue;
+      if ((counts.get(go) ?? 0) >= MAX_CLAIMS.construct) continue;
+      let materialType = null;
+      for (const t of cs.neededTypes()) {
+        if ((this._game.resources?.get(t) ?? 0) > 0) { materialType = t; break; }
+      }
+      if (!materialType) continue;
+      const score = this._fairScore(ant, go, 'construct', now);
+      if (score < priorityScore) {
+        priorityBest = { kind: 'construct', target: go, materialType };
+        priorityScore = score;
+      }
+    }
+
+    // If a priority claim exists, take it and skip ambient entirely.
+    if (priorityBest) {
+      this._claims.set(ant, priorityBest);
+      return priorityBest;
+    }
+
+    // ── AMBIENT: harvest, tend, seed, restock ─────────────────────────────
+    let best = ambientBest, bestScore = ambientScore;
 
     for (const go of this._resourceNodes) {
       const rn = go.getComponent(ResourceNode);
@@ -106,48 +162,6 @@ export class WorkManager {
       } else if (fp.isReadyToHarvest() && used < MAX_CLAIMS.harvest) {
         const score = this._fairScore(ant, go, 'harvest', now);
         if (score < bestScore) { best = { kind: 'harvest', target: go, type: fp.yieldType() }; bestScore = score; }
-      }
-    }
-
-    // Egg delivery: only dispatch when a training hut has pending requests
-    // AND we don't already have enough eggs in transit to satisfy them.
-    // Without this cap, multiple preempted workers each grab an egg for the
-    // same single queue slot — only one gets delivered, the rest are wasted.
-    const hutWithRequest = this._nearestTrainingHut(ant);
-    if (hutWithRequest) {
-      let totalRequests = 0;
-      for (const go of this._trainingHuts) {
-        const th = go.getComponent(TrainingHut);
-        if (th) totalRequests += th.queueLength;
-      }
-      let inFlightEggs = 0;
-      for (const c of this._claims.values()) {
-        if (c.kind === 'egg') inFlightEggs++;
-      }
-      if (inFlightEggs < totalRequests) {
-        for (const go of this._looseEggs) {
-          if ((counts.get(go) ?? 0) >= MAX_CLAIMS.egg) continue;
-          const score = this._fairScore(ant, go, 'egg', now);
-          if (score < bestScore) { best = { kind: 'egg', target: go, trainingHut: hutWithRequest }; bestScore = score; }
-        }
-      }
-    }
-
-    // Construction: in-progress sites that still need a material the player
-    // currently has in stockpile. Workers always source from the hive.
-    for (const go of this._constructionSites) {
-      const cs = go.getComponent(ConstructionSite);
-      if (!cs || cs.isComplete()) continue;
-      if ((counts.get(go) ?? 0) >= MAX_CLAIMS.construct) continue;
-      let materialType = null;
-      for (const t of cs.neededTypes()) {
-        if ((this._game.resources?.get(t) ?? 0) > 0) { materialType = t; break; }
-      }
-      if (!materialType) continue;
-      const score = this._fairScore(ant, go, 'construct', now);
-      if (score < bestScore) {
-        best = { kind: 'construct', target: go, materialType };
-        bestScore = score;
       }
     }
 
@@ -349,12 +363,7 @@ export class WorkManager {
     const kinds = this._eligibleSince.get(target);
     const since = kinds?.get(kind) ?? now;
     const age = now - since;
-    let score = d2 / (1 + age * FAIRNESS_K);
-    // Player-driven work beats ambient harvest/tend so explicit player intent
-    // (queue an ant, place a building) gets serviced quickly even when the
-    // colony is busy with raw-material gathering.
-    if (kind === 'egg' || kind === 'construct') score /= PLAYER_TASK_BOOST;
-    return score;
+    return d2 / (1 + age * FAIRNESS_K);
   }
 
   // Update the eligibility timestamps: record when targets first become valid,
