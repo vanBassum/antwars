@@ -28,6 +28,9 @@ export class ConstructionSite extends Component {
       obj.material.depthWrite  = false;
       this._ghostMats.push(obj.material);
     });
+    // Wake up any worker mid-harvest so they can switch to delivering
+    // construction material right away instead of waiting for cycle boundary.
+    this.gameObject.game?.workManager?.preemptWorkers?.();
   }
 
   needsMaterial(type) {

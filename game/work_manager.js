@@ -350,7 +350,10 @@ export class WorkManager {
     const since = kinds?.get(kind) ?? now;
     const age = now - since;
     let score = d2 / (1 + age * FAIRNESS_K);
-    if (kind === 'egg') score /= PLAYER_TASK_BOOST;
+    // Player-driven work beats ambient harvest/tend so explicit player intent
+    // (queue an ant, place a building) gets serviced quickly even when the
+    // colony is busy with raw-material gathering.
+    if (kind === 'egg' || kind === 'construct') score /= PLAYER_TASK_BOOST;
     return score;
   }
 
