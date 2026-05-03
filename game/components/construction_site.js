@@ -28,9 +28,14 @@ export class ConstructionSite extends Component {
       obj.material.depthWrite  = false;
       this._ghostMats.push(obj.material);
     });
-    // Wake up any worker mid-harvest so they can switch to delivering
-    // construction material right away instead of waiting for cycle boundary.
-    this.gameObject.game?.workManager?.preemptWorkers?.();
+    // Order matters: mark the WorkManager cache dirty BEFORE preempting so the
+    // workers' re-pick sees this new site in _constructionSites. game.add only
+    // fires the scene-change notification AFTER start() returns, which would
+    // otherwise leave the cache stale during the preempt and the workers would
+    // re-claim ambient sugar runs instead of switching to construction.
+    const wm = this.gameObject.game?.workManager;
+    wm?.markDirty?.();
+    wm?.preemptWorkers?.();
   }
 
   needsMaterial(type) {
