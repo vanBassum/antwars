@@ -20,7 +20,7 @@ export class WorldLoader {
     for (const e of (data.entities ?? [])) {
       const def = this._defs.get(e.id);
       if (!def) { console.warn(`WorldLoader: unknown entity "${e.id}"`); continue; }
-      const go = def.createObject();
+      const go = def.createObject(game);
 
       if (this._hexGrid && def.occupiesHex) {
         // Snap buildings to the nearest hex center and reserve the hex

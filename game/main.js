@@ -4,7 +4,8 @@ import { CameraRig } from '../engine/components/camera_rig.js';
 import { DirectionalLight } from '../engine/components/directional_light.js';
 import { WorldLoader } from '../engine/world_loader.js';
 import { ENTITY_DEFS, preloadEntityModels } from './entities.js';
-import { loadModel, measureModelFootprint } from '../engine/model_cache.js';
+import { loadModel, measureModelFootprint, getModelScene } from '../engine/model_cache.js';
+import { InstancedMeshGroup } from '../engine/instanced_mesh_group.js';
 import { HexGrid } from '../engine/hex/hex_grid.js';
 import { HexGridRenderer } from '../engine/components/hex_grid_renderer.js';
 import { Resources } from '../engine/resources.js';
@@ -63,6 +64,14 @@ await Promise.all([
   loadModel('assets/models/FeedingTray.glb'),
   loadModel('assets/models/HoneyBlob.glb'),
 ]);
+
+// Instanced pools for ants and queen — shared across all entities of each type.
+const antInstances = new InstancedMeshGroup(getModelScene('assets/models/Ant.glb'), { capacity: 256, scale: 0.25 });
+const queenInstances = new InstancedMeshGroup(getModelScene('assets/models/Queen.glb'), { capacity: 4, scale: 0.4 });
+game.scene.add(antInstances.object3D);
+game.scene.add(queenInstances.object3D);
+game.antInstances   = antInstances;
+game.queenInstances = queenInstances;
 
 // Hex size = anthill footprint inscribed exactly (flat-to-flat = sqrt(3) * size)
 const anthillFootprint = measureModelFootprint('assets/models/AntHill.glb');

@@ -23,6 +23,11 @@ export function cloneModel(url) {
   return clone;
 }
 
+// Returns the cached scene for a previously loaded model (no clone).
+export function getModelScene(url) {
+  return _cache.get(url) ?? null;
+}
+
 // Max horizontal extent (max of bbox.x, bbox.z) of a preloaded model.
 export function measureModelFootprint(url) {
   const scene = _cache.get(url);
