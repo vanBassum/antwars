@@ -78,10 +78,15 @@ export class Worker extends Component {
     const creditDeposit = (type, amount) => game.resources?.add(type, amount);
 
     // Shared travel: GoToHive — open precondition so all three cycles can
-    // pull it into their plan whenever they need atHive=true.
+    // pull it into their plan whenever they need atHive=true. Effects must
+    // null EVERY other "at" location flag, otherwise stale ones poison the
+    // next plan: e.g. atSite stays true after a construction deposit, and
+    // the planner then skips GoToSite on the next trip — the worker walks
+    // to the hive, takes wood, and immediately fires DepositMaterial right
+    // there because atSite=true is still satisfied in worldState.
     const goToHive = new GoToAction('GoToHive', hiveGO,
       { atHive: false },
-      { atHive: true, atResource: false, atFarm: false },
+      { atHive: true, atResource: false, atFarm: false, atEgg: false, atTrainingHut: false, atSugarSource: false, atTray: false, atSite: false },
       onCycleFail);
 
     const actions = [
