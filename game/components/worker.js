@@ -55,10 +55,6 @@ export class Worker extends Component {
     this._restock = new DeliverSugarTask();
     this._blob    = null;
     this._wanderTimer = null;
-    // Counts cycle aborts since the last successful goal. If we fail repeatedly
-    // (usually the GoToAction watchdog killing the same broken trip over and
-    // over), force a relocation so the next plan starts from a different hex.
-    this._failuresInRow = 0;
 
     // Per-ant lateral path offset — picked once, in a small ring around
     // the path centerline. Two ants on the same path won't overlap
@@ -75,7 +71,7 @@ export class Worker extends Component {
     // Any failure mid-cycle: clear everything cleanly and re-pick. This is
     // what prevents stuck ants — without it the planner would re-plan the
     // same dead target on the next tick.
-    const onCycleFail = () => { this._failuresInRow++; this._abandonCycle(); };
+    const onCycleFail = () => this._abandonCycle();
     const creditDeposit = (type, amount) => game.resources?.add(type, amount);
 
     // Shared travel: GoToHive — open precondition so all three cycles can
@@ -110,7 +106,6 @@ export class Worker extends Component {
       agent.worldState.seeded       = false;
       agent.worldState.eggDelivered   = false;
       agent.worldState.sugarDelivered = false;
-      this._failuresInRow = 0;
       this._releaseClaim();
       this._pickNextCycle();
     };
@@ -133,22 +128,6 @@ export class Worker extends Component {
     // claim needed (and the harvest task still holds the type).
     if (agent.worldState.hasResource) {
       agent.goal = HARVEST_GOAL;
-      return;
-    }
-
-    // Loop-breaker: if recent claims keep failing the same broken trip
-    // (GoToAction watchdog firing), walk somewhere else before re-claiming.
-    // The new starting hex usually changes the path enough to succeed.
-    if (this._failuresInRow >= 3) {
-      this._failuresInRow = 0;
-      this._harvest.clear();
-      this._tend.clear();
-      this._seed.clear();
-      this._egg.clear();
-      this._restock.clear();
-      this._pickWanderTarget();
-      agent.goal = HARVEST_GOAL;
-      agent._retryTimer = 5; // suppress planning so the wander can run uninterrupted
       return;
     }
 

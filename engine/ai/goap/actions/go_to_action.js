@@ -68,7 +68,14 @@ export class GoToAction extends Action {
     const path = grid.findPath(from.q, from.r, goal.q, goal.r);
     if (!path) { this._fail(agent, mover); return; }
     const waypoints = smoothPath(grid, ant.position, path, edgeOverride);
-    if (!waypoints || waypoints.length === 0) { this._fail(agent, mover); return; }
+    // Already at the goal hex — happens when wander or a previous trip left
+    // the ant in the destination cell while worldState still says she's
+    // elsewhere. Succeed immediately so the effect (atHive/atFarm/etc.) gets
+    // applied and the planner moves on, instead of looping on a no-op trip.
+    if (!waypoints || waypoints.length === 0) {
+      mover.arrived = true;
+      return;
+    }
     mover.moveAlong(waypoints);
 
     // Track hex cells along this path so we can invalidate if one becomes blocked.
