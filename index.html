@@ -56,6 +56,27 @@
       font-size: 14px; font-weight: 600;
       padding: 2px 4px 4px;
     }
+    .context-menu.has-corner .context-menu-title { padding-right: 56px; }
+    .context-menu-corner {
+      position: absolute; top: 4px; right: 4px;
+      display: flex; gap: 2px;
+    }
+    .corner-btn {
+      width: 22px; height: 22px; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: transparent; border: 1px solid transparent;
+      border-radius: 3px; color: #fff;
+      font-size: 13px; line-height: 1; cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .corner-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    .corner-btn.danger:hover {
+      background: rgba(255, 80, 80, 0.25);
+      border-color: rgba(255, 80, 80, 0.6);
+    }
     .context-menu-state {
       font-size: 12px; opacity: 0.75; padding: 0 4px 4px;
     }

@@ -13,9 +13,9 @@ export class Building extends Component {
   getContextMenu() {
     return {
       title: this._def.name,
-      actions: [
-        { icon: '🔀', label: 'Move',    onClick: () => this._move() },
-        { icon: '🗑️', label: 'Destroy', onClick: () => this._destroy() },
+      cornerActions: [
+        { icon: '🔀', title: 'Move',    onClick: () => this._move() },
+        { icon: '🗑️', title: 'Destroy', danger: true, onClick: () => this._destroy() },
       ],
     };
   }

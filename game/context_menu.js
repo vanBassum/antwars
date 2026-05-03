@@ -10,11 +10,12 @@ const UPDATE_MS = 200;
 //
 // Shape of the returned descriptor:
 //   {
-//     title:    string,
-//     state:    string,                                       // optional
-//     progress: { label, value (0..1), text } | [{...}],      // optional, single or array
-//     picker:   { options: [{ icon, label, selected, onClick }] }, // optional — compact icon-only toggle row
-//     actions:  [{ icon, label, selected?, onClick }],        // optional — full-width buttons
+//     title:         string,
+//     state:         string,                                       // optional
+//     progress:      { label, value (0..1), text } | [{...}],      // optional, single or array
+//     picker:        { options: [{ icon, label, selected, onClick }] }, // optional — compact icon-only toggle row
+//     actions:       [{ icon, label, selected?, onClick }],        // optional — full-width buttons
+//     cornerActions: [{ icon, title, danger?, onClick }],          // optional — small icon-only buttons in the card's top-right
 //   }
 //
 // While the menu is open it polls getContextMenu every UPDATE_MS so live
@@ -154,6 +155,7 @@ export class ContextMenu {
       Array.isArray(data.progress) ? data.progress.length : (data.progress ? 1 : 0),
       data.picker?.options?.map(o => `${o.label}:${o.selected ? '1' : '0'}`).join(',') ?? '',
       data.actions?.map(a => `${a.label}:${a.selected ? '1' : '0'}`).join(',') ?? '',
+      data.cornerActions?.map(a => a.title ?? a.icon).join(',') ?? '',
     ]);
   }
 
@@ -236,6 +238,7 @@ export class ContextMenu {
     const merged = {};
     const allProgress = [];
     const allActions  = [];
+    const allCorner   = [];
     for (const p of providers) {
       const d = p.getContextMenu();
       if (!d) continue;
@@ -246,11 +249,13 @@ export class ContextMenu {
         const items = Array.isArray(d.progress) ? d.progress : [d.progress];
         allProgress.push(...items);
       }
-      if (d.actions) allActions.push(...d.actions);
+      if (d.actions)       allActions.push(...d.actions);
+      if (d.cornerActions) allCorner.push(...d.cornerActions);
     }
     if (!merged.title) return null;
-    if (allProgress.length) merged.progress = allProgress;
-    if (allActions.length)  merged.actions  = allActions;
+    if (allProgress.length) merged.progress      = allProgress;
+    if (allActions.length)  merged.actions       = allActions;
+    if (allCorner.length)   merged.cornerActions = allCorner;
     return merged;
   }
 
@@ -264,6 +269,24 @@ export class ContextMenu {
   _renderData(data) {
     this._lastSig = this._sig(data);
     this._menu.innerHTML = '';
+    this._menu.classList.toggle('has-corner', !!data.cornerActions?.length);
+    if (data.cornerActions?.length) {
+      const row = document.createElement('div');
+      row.className = 'context-menu-corner';
+      for (const act of data.cornerActions) {
+        const btn = document.createElement('button');
+        btn.className = 'corner-btn' + (act.danger ? ' danger' : '');
+        btn.title     = act.title ?? '';
+        btn.textContent = act.icon ?? '';
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          act.onClick?.();
+          this._render();
+        });
+        row.append(btn);
+      }
+      this._menu.append(row);
+    }
     if (data.title) {
       const el = document.createElement('div');
       el.className   = 'context-menu-title';

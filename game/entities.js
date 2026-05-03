@@ -109,6 +109,7 @@ export const ENTITY_DEFS = [
       const go = new GameObject('Training Hut');
       go.object3D.add(cloneModel(this.modelUrl));
       go.addComponent(new TrainingHut());
+      go.addComponent(new Building(this));
       return go;
     },
   }),
