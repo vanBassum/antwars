@@ -15,8 +15,8 @@ class PickupEggAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = PICKUP_DURATION;
-    this.preconditions = { location: 'egg', hasEgg: false, eggAvailable: true };
-    this.effects       = { hasEgg: true };
+    this.preconditions = { location: 'egg', carrying: null, eggAvailable: true };
+    this.effects       = { carrying: 'egg' };
   }
   enter() { this._t = 0; }
   perform(agent, dt) {
@@ -44,8 +44,8 @@ class DepositEggAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = DROP_DURATION;
-    this.preconditions = { location: 'trainingHut', hasEgg: true };
-    this.effects       = { hasEgg: false, eggDelivered: true };
+    this.preconditions = { location: 'trainingHut', carrying: 'egg' };
+    this.effects       = { carrying: null, eggDelivered: true };
   }
   enter() { this._t = 0; }
   perform(agent, dt) {
@@ -69,14 +69,14 @@ class DepositEggAction extends Action {
 export function buildDeliverEggActions({ task, setCarrying, onCycleFail }) {
   return [
     new GoToAction('GoToEgg', () => task.egg,
-      { hasEgg: false, eggAvailable: true },
+      { carrying: null, eggAvailable: true },
       { location: 'egg' },
       onCycleFail),
     new PickupEggAction(task,
       () => setCarrying('egg'),
       onCycleFail),
     new GoToAction('GoToTrainingHut', () => task.trainingHut,
-      { hasEgg: true },
+      { carrying: 'egg' },
       { location: 'trainingHut' },
       onCycleFail),
     new DepositEggAction(task,

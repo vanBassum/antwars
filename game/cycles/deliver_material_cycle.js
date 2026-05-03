@@ -15,8 +15,8 @@ class TakeMaterialAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = TAKE_DURATION;
-    this.preconditions = { location: 'hive', hasMaterial: false, constructAvailable: true };
-    this.effects       = { hasMaterial: true };
+    this.preconditions = { location: 'hive', carrying: null, constructAvailable: true };
+    this.effects       = { carrying: 'material' };
   }
   enter() { this._t = 0; }
   perform(agent, dt) {
@@ -43,8 +43,8 @@ class DepositMaterialAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = DROP_DURATION;
-    this.preconditions = { location: 'site', hasMaterial: true };
-    this.effects       = { hasMaterial: false, materialDelivered: true };
+    this.preconditions = { location: 'site', carrying: 'material' };
+    this.effects       = { carrying: null, materialDelivered: true };
   }
   enter() { this._t = 0; }
   perform(agent, dt) {
@@ -74,7 +74,7 @@ export function buildConstructActions({ task, game, setCarrying, onCycleFail }) 
       () => setCarrying(task.materialType ?? 'wood'),
       onCycleFail),
     new GoToAction('GoToSite', () => task.site,
-      { hasMaterial: true },
+      { carrying: 'material' },
       { location: 'site' },
       onCycleFail),
     new DepositMaterialAction(task,

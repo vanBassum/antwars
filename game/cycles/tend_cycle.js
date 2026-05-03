@@ -15,8 +15,8 @@ class WaterFarmAction extends Action {
     this._onSuccess    = onSuccess;
     this._onFailure    = onFailure;
     this._duration     = WATER_DURATION;
-    this.preconditions = { location: 'farm', hasWater: true, farmAvailable: true };
-    this.effects       = { hasWater: false, tended: true };
+    this.preconditions = { location: 'farm', carrying: 'water', farmAvailable: true };
+    this.effects       = { carrying: null, tended: true };
   }
   enter(_agent) { this._t = 0; }
   perform(agent, dt) {
@@ -42,11 +42,11 @@ class WaterFarmAction extends Action {
 export function buildTendActions({ task, setCarrying, onCycleFail }) {
   return [
     new WaitAction('TakeWater', 0.2,
-      { location: 'hive', hasWater: false },
-      { hasWater: true },
+      { location: 'hive', carrying: null },
+      { carrying: 'water' },
       () => setCarrying('water')),
     new GoToAction('GoToFarmForWater', () => task.target,
-      { hasWater: true, farmAvailable: true },
+      { carrying: 'water', farmAvailable: true },
       { location: 'farm' },
       onCycleFail),
     new WaterFarmAction(task,

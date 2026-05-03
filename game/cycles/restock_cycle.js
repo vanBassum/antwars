@@ -15,8 +15,8 @@ class TakeSugarAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = TAKE_DURATION;
-    this.preconditions = { location: 'sugarSource', hasSugar: false, restockAvailable: true };
-    this.effects       = { hasSugar: true };
+    this.preconditions = { location: 'sugarSource', carrying: null, restockAvailable: true };
+    this.effects       = { carrying: 'restock-sugar' };
   }
   enter() { this._t = 0; }
   perform(agent, dt) {
@@ -44,8 +44,8 @@ class DepositSugarAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = DROP_DURATION;
-    this.preconditions = { location: 'tray', hasSugar: true };
-    this.effects       = { hasSugar: false, sugarDelivered: true };
+    this.preconditions = { location: 'tray', carrying: 'restock-sugar' };
+    this.effects       = { carrying: null, sugarDelivered: true };
   }
   enter() { this._t = 0; }
   perform(agent, dt) {
@@ -75,14 +75,14 @@ export function buildRestockActions({ task, game, hiveGO, setCarrying, onCycleFa
 
   return [
     new GoToAction('GoToSugarSource', sugarTarget,
-      { hasSugar: false, restockAvailable: true },
+      { carrying: null, restockAvailable: true },
       { location: 'sugarSource' },
       onCycleFail),
     new TakeSugarAction(task, game,
       () => setCarrying('sugar'),
       onCycleFail),
     new GoToAction('GoToTray', () => task.tray,
-      { hasSugar: true },
+      { carrying: 'restock-sugar' },
       { location: 'tray' },
       onCycleFail),
     new DepositSugarAction(task,

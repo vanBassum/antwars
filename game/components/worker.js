@@ -100,11 +100,17 @@ export class Worker extends Component {
     const agent = this.gameObject.getComponent(GOAPAgent);
     agent.actions    = actions;
     agent.worldState = {
-      // Carry slot — one boolean per intent. Mutually exclusive in practice
-      // (see follow-up refactor for a single `carrying` enum).
-      hasResource: false, hasWater: false, hasSeed: false, hasEgg: false, hasSugar: false, hasMaterial: false,
-      // Where the worker is — single enum field, mutually exclusive by
-      // construction. null until a GoToX completes.
+      // Single carry slot — null or one of:
+      //   'resource'      — harvested sugar/wood (visual type lives on _harvest.type)
+      //   'water'         — fetched from hive for tend cycle
+      //   'seed'          — fetched from hive for seed cycle
+      //   'egg'           — picked up off the ground for delivery to a training hut
+      //   'restock-sugar' — sugar bound for a feeding tray (distinct from harvest sugar)
+      //   'material'      — wood from stockpile bound for a construction site
+      // Mutually exclusive by construction.
+      carrying: null,
+      // Where the worker is — single enum, mutually exclusive by construction.
+      // null until a GoToX completes.
       location: null,
       // Per-cycle goal markers, reset in onGoalReached.
       delivered: false, tended: false, seeded: false, eggDelivered: false, sugarDelivered: false, materialDelivered: false,
@@ -146,7 +152,7 @@ export class Worker extends Component {
 
     // Already carrying a gathered resource → finish the delivery; no new
     // claim needed (and the harvest task still holds the type).
-    if (agent.worldState.hasResource) {
+    if (agent.worldState.carrying === 'resource') {
       agent.goal = HARVEST_GOAL;
       return;
     }
@@ -234,18 +240,15 @@ export class Worker extends Component {
     // The harvest source is gone, but if we already have its product the
     // Deposit step still needs harvest.type to credit the right resource.
     this._harvest.target = null;
-    if (!agent.worldState.hasResource) this._harvest.type = null;
+    const carryingResource = agent.worldState.carrying === 'resource';
+    if (!carryingResource) this._harvest.type = null;
     this._tend.clear();
     this._seed.clear();
     this._egg.clear();
     this._restock.clear();
     this._construct.clear();
-    if (!agent.worldState.hasResource) {
-      agent.worldState.hasWater    = false;
-      agent.worldState.hasSeed     = false;
-      agent.worldState.hasEgg      = false;
-      agent.worldState.hasSugar    = false;
-      agent.worldState.hasMaterial = false;
+    if (!carryingResource) {
+      agent.worldState.carrying = null;
       this._setCarrying(null);
     }
     agent.invalidate();
@@ -311,8 +314,8 @@ export class Worker extends Component {
     // would lose the unit (gathered resources, sugar pulled from stockpile
     // for restock, wood pulled from stockpile for construction). Let the
     // current trip finish; the worker will re-evaluate at the cycle boundary.
-    const ws = agent.worldState;
-    if (ws.hasResource || ws.hasSugar || ws.hasMaterial) return;
+    const c = agent.worldState.carrying;
+    if (c === 'resource' || c === 'restock-sugar' || c === 'material') return;
     // Don't interrupt if already on an egg delivery.
     if (this._egg.hasTarget()) return;
     this._abandonCycle();
@@ -339,12 +342,14 @@ export class Worker extends Component {
     else if (this._construct.site)   target = `${this._construct.materialType ?? 'material'} → ${this._construct.site.name ?? 'site'}`;
 
     let carrying = 'empty';
-    if (ws.hasResource && this._harvest.type) carrying = this._harvest.type;
-    else if (ws.hasWater)                     carrying = 'water';
-    else if (ws.hasSeed)                      carrying = 'seed';
-    else if (ws.hasEgg)                       carrying = 'egg';
-    else if (ws.hasSugar)                     carrying = 'sugar (restock)';
-    else if (ws.hasMaterial)                  carrying = `${this._construct.materialType ?? 'material'} (build)`;
+    switch (ws.carrying) {
+      case 'resource':      carrying = this._harvest.type ?? 'resource'; break;
+      case 'water':         carrying = 'water'; break;
+      case 'seed':          carrying = 'seed'; break;
+      case 'egg':           carrying = 'egg'; break;
+      case 'restock-sugar': carrying = 'sugar (restock)'; break;
+      case 'material':      carrying = `${this._construct.materialType ?? 'material'} (build)`; break;
+    }
 
     return { task, target, carrying };
   }

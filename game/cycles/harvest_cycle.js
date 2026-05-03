@@ -15,8 +15,8 @@ class CollectResourceAction extends Action {
     this._onSuccess    = onSuccess;
     this._onFailure    = onFailure;
     this._duration     = COLLECT_DURATION;
-    this.preconditions = { location: 'resource', hasResource: false, resourceAvailable: true };
-    this.effects       = { hasResource: true };
+    this.preconditions = { location: 'resource', carrying: null, resourceAvailable: true };
+    this.effects       = { carrying: 'resource' };
   }
   enter(_agent) { this._t = 0; }
   perform(agent, dt) {
@@ -62,15 +62,15 @@ class CollectResourceAction extends Action {
 export function buildHarvestActions({ task, setCarrying, onCycleFail, creditDeposit }) {
   return [
     new GoToAction('GoToHarvest', () => task.target,
-      { hasResource: false, resourceAvailable: true },
+      { carrying: null, resourceAvailable: true },
       { location: 'resource' },
       onCycleFail),
     new CollectResourceAction(task,
       () => setCarrying(task.type),
       onCycleFail),
     new WaitAction('Deposit', 0.3,
-      { location: 'hive', hasResource: true },
-      { hasResource: false, delivered: true },
+      { location: 'hive', carrying: 'resource' },
+      { carrying: null, delivered: true },
       () => {
         if (task.type) creditDeposit(task.type, 1);
         setCarrying(null);
