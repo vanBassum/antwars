@@ -60,6 +60,7 @@ await Promise.all([
   // Crop visuals spawned by FarmPlot when growing.
   loadModel('assets/models/BerryBush.glb'),
   loadModel('assets/models/Egg.glb'),
+  loadModel('assets/models/FeedingTray.glb'),
 ]);
 
 // Hex size = anthill footprint inscribed exactly (flat-to-flat = sqrt(3) * size)
@@ -114,6 +115,14 @@ const actionBar = new ActionBar(game.resources, [
     costLabel: '10 🪵',
     cost:      { wood: 10 },
     onActivate: (commit) => startPlacement('training_hut', commit),
+  },
+  {
+    icon:      '🍯',
+    iconUrl:   'assets/icons/FeedingTray.png',
+    label:     'Feeding Tray',
+    costLabel: '5 🪵',
+    cost:      { wood: 5 },
+    onActivate: (commit) => startPlacement('feeding_tray', commit),
   },
 ]);
 

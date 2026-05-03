@@ -9,6 +9,7 @@ import { FarmPlot } from './components/farm_plot.js';
 import { Queen } from './components/queen.js';
 import { EggPickup } from './components/egg_pickup.js';
 import { TrainingHut } from './components/training_hut.js';
+import { FeedingTray } from './components/feeding_tray.js';
 import { Building } from './components/building.js';
 
 export const ENTITY_DEFS = [
@@ -109,6 +110,17 @@ export const ENTITY_DEFS = [
       const go = new GameObject('Training Hut');
       go.object3D.add(cloneModel(this.modelUrl));
       go.addComponent(new TrainingHut());
+      go.addComponent(new Building(this));
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'feeding_tray', name: 'Feeding Tray', icon: '🍯', iconUrl: 'assets/icons/FeedingTray.png', yOffset: 0, occupiesHex: true,
+    modelUrl: 'assets/models/FeedingTray.glb',
+    createObject() {
+      const go = new GameObject('Feeding Tray');
+      go.object3D.add(cloneModel(this.modelUrl));
+      go.addComponent(new FeedingTray());
       go.addComponent(new Building(this));
       return go;
     },
