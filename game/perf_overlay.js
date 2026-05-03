@@ -2,8 +2,11 @@
 // (the top-left 🐞 button or F3) that shows per-ant debug labels also shows
 // this panel, so there's one mental model for "debug stuff on/off".
 
+import { Component } from '../engine/gameobject.js';
+
 const HISTORY_SIZE = 120; // frames of history for the graph
 const TARGET_MS    = 1000 / 60; // 60fps budget — matches the green line on the graph
+const TOP_COMPONENTS = 6; // how many component types to show in the breakdown
 
 export class PerfOverlay {
   constructor(game, debug) {
@@ -15,6 +18,11 @@ export class PerfOverlay {
     this._fpsFrames = 0;
     this._fps = 0;
     this._lastFpsUpdate = 0;
+
+    // Component-level profiling is gated to when the overlay is visible —
+    // the per-update performance.now() pair has measurable cost on hot loops
+    // and we don't want to pay it in production / when the HUD is hidden.
+    Component.profileEnabled = !!debug?.enabled;
 
     this._el = document.createElement('div');
     this._el.className = 'perf-overlay';
@@ -34,7 +42,10 @@ export class PerfOverlay {
 
     this._injectStyles();
 
-    debug?.onChange(on => { this._el.style.display = on ? '' : 'none'; });
+    debug?.onChange(on => {
+      this._el.style.display = on ? '' : 'none';
+      Component.profileEnabled = on;
+    });
   }
 
   tick() {
@@ -78,13 +89,25 @@ export class PerfOverlay {
     const load = Math.min(100, (timing.total / TARGET_MS) * 100);
     const idle = Math.max(0, 100 - load);
 
-    this._stats.textContent =
+    let text =
       `FPS: ${this._fps}  frame: ${timing.total.toFixed(1)} ms\n` +
       `  load: ${load.toFixed(0)}%  idle: ${idle.toFixed(0)}%\n` +
       `  update: ${timing.update.toFixed(1)}  logic: ${timing.logic.toFixed(1)}  render: ${timing.render.toFixed(1)}\n` +
       `Entities: ${total}  ants: ${ants}  farms: ${farms}  resources: ${resources}\n` +
       `Draw calls: ${info.render.calls}  tris: ${info.render.triangles}  ` +
       `geom: ${info.memory.geometries}  tex: ${info.memory.textures}`;
+
+    // Top component update costs (sum across all instances of each class)
+    const comps = timing.components;
+    if (comps && comps.length) {
+      text += '\nUpdate breakdown (ms / count):';
+      for (let i = 0; i < Math.min(TOP_COMPONENTS, comps.length); i++) {
+        const c = comps[i];
+        text += `\n  ${c.name.padEnd(16)} ${c.ms.toFixed(2).padStart(5)}  x${c.count}`;
+      }
+    }
+
+    this._stats.textContent = text;
 
     this._drawGraph();
   }

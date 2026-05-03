@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Component } from './gameobject.js';
 
 export class Game {
   constructor({ container = document.body } = {}) {
@@ -90,6 +91,8 @@ export class Game {
     const dt = rawDt * this.timeScale;
     this.elapsed += dt;
 
+    if (Component.profileEnabled) Component.resetProfile();
+
     const t0 = performance.now();
     for (const go of this.gameObjects) go.update(dt);
     const t1 = performance.now();
@@ -104,6 +107,7 @@ export class Game {
       logic:  t2 - t1,
       render: t3 - t2,
       total:  t3 - t0,
+      components: Component.profileEnabled ? Component.snapshotProfile() : null,
     };
   }
 }
