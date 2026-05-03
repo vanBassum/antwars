@@ -1,4 +1,5 @@
 import { Component } from '../../engine/gameobject.js';
+import { applyGhost, restoreFromGhost } from '../../engine/ghost_material.js';
 
 // A building under construction. Tracks per-resource remaining cost and
 // applies a translucent ghost overlay to the building's meshes until the
@@ -16,18 +17,11 @@ export class ConstructionSite extends Component {
     this._def        = def;
     this._onComplete = onComplete;
     this._completed  = false;
-    this._ghostMats  = [];
+    this._ghostHandle = null;
   }
 
   start() {
-    this.gameObject.object3D.traverse(obj => {
-      if (!obj.isMesh) return;
-      obj.material = obj.material.clone();
-      obj.material.transparent = true;
-      obj.material.opacity     = 0.45;
-      obj.material.depthWrite  = false;
-      this._ghostMats.push(obj.material);
-    });
+    this._ghostHandle = applyGhost(this.gameObject.object3D);
     // Wake any worker mid-cycle so they re-evaluate immediately instead of
     // waiting for cycle boundary. The WorkManager rebuilds its caches each
     // request() now, so the new site is visible right away.
@@ -66,12 +60,8 @@ export class ConstructionSite extends Component {
 
   _complete() {
     this._completed = true;
-    for (const m of this._ghostMats) {
-      m.transparent = false;
-      m.opacity     = 1.0;
-      m.depthWrite  = true;
-    }
-    this._ghostMats.length = 0;
+    restoreFromGhost(this._ghostHandle);
+    this._ghostHandle = null;
     this._onComplete?.(this.gameObject);
   }
 

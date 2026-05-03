@@ -17,6 +17,7 @@ import { DebugMode } from './debug.js';
 import { DebugOverlay } from './debug_overlay.js';
 import { PerfOverlay } from './perf_overlay.js';
 import { SpeedControls } from './speed_controls.js';
+import { BuildingInstanceManager } from './building_instance_manager.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -76,6 +77,10 @@ game.add(hexGridGO);
 
 // Central work dispatcher — must exist before any Worker components start.
 game.workManager = new WorkManager(game);
+
+// Batches draw calls for multi-instance building types (farm plots, feeding
+// trays, bushes, sugar nodes) via InstancedMesh.
+game.buildingInstances = new BuildingInstanceManager(game.scene);
 
 // World file is normally `flat.json`; `?world=<name>` lets perf benchmarks
 // load alternate scenes (e.g. `?world=stress.flat.json`) without rebuilding.

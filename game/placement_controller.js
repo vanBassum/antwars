@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Worker } from './components/worker.js';
+import { applyGhost, restoreFromGhost, setGhostTint, disposeGhostTint } from '../engine/ghost_material.js';
 
 // Reusable click-to-place mode. Call start(def, onCommit) to enter placement
 // for a given EntityDef; the controller renders a ghost preview that snaps to
@@ -12,7 +13,7 @@ export class PlacementController {
     this._def        = null;
     this._onCommit   = null;
     this._ghost      = null;
-    this._ghostMats  = [];
+    this._ghostHandle = null;
     this._raycaster  = new THREE.Raycaster();
     this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
@@ -44,15 +45,7 @@ export class PlacementController {
     const go = def.createObject();
     go.game = this._game;
     go.start();
-    this._ghostMats.length = 0;
-    go.object3D.traverse(obj => {
-      if (!obj.isMesh) return;
-      obj.material = obj.material.clone();
-      obj.material.transparent = true;
-      obj.material.opacity     = 0.5;
-      obj.material.depthWrite  = false;
-      this._ghostMats.push(obj.material);
-    });
+    this._ghostHandle = applyGhost(go.object3D);
     go.object3D.visible = false;
     this._game.scene.add(go.object3D);
     this._ghost = go;
@@ -70,8 +63,8 @@ export class PlacementController {
   }
 
   _setGhostTint(valid) {
-    const color = valid ? 0xffffff : 0xff6666;
-    for (const m of this._ghostMats) m.color?.setHex(color);
+    const color = valid ? 0xaaccff : 0xff6666;
+    setGhostTint(this._ghostHandle, color);
   }
 
   _onMouseMove(e) {
@@ -118,11 +111,12 @@ export class PlacementController {
   _cancel() {
     const cb = this._onCancel;
     if (this._ghost) {
+      disposeGhostTint(this._ghostHandle);
+      this._ghostHandle = null;
       this._game.scene.remove(this._ghost.object3D);
       this._ghost.destroy();
       this._ghost = null;
     }
-    this._ghostMats.length = 0;
     this._active   = false;
     this._def      = null;
     this._onCommit = null;
