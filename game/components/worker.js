@@ -251,6 +251,10 @@ export class Worker extends Component {
       agent.worldState.carrying = null;
       this._setCarrying(null);
     }
+    // Interrupting mid-GoTo means we walked away from the last labeled
+    // location — null it so the next plan re-walks via a real GoTo instead
+    // of letting (e.g.) TakeMaterial fire wherever we happen to stand.
+    agent.worldState.location = null;
     agent.invalidate();
     this._pickNextCycle();
   }
