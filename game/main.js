@@ -14,6 +14,7 @@ import { ActionBar } from './action_bar.js';
 import { PlacementController } from './placement_controller.js';
 import { ContextMenu } from './context_menu.js';
 import { WorkManager } from './work_manager.js';
+import { initCropInstances } from './crop_instance_registry.js';
 import { DebugMode } from './debug.js';
 import { DebugOverlay } from './debug_overlay.js';
 import { PerfOverlay } from './perf_overlay.js';
@@ -73,6 +74,12 @@ game.scene.add(antInstances.object3D);
 game.scene.add(queenInstances.object3D);
 game.antInstances   = antInstances;
 game.queenInstances = queenInstances;
+
+// Crop instance pools (FarmPlot grows-into-instance flow).
+initCropInstances(game.scene, [
+  'assets/models/BerryBush.glb',
+  'assets/models/Bush.glb',
+]);
 
 // Hex size = anthill footprint inscribed exactly (flat-to-flat = sqrt(3) * size)
 const anthillFootprint = measureModelFootprint('assets/models/AntHill.glb');

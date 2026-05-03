@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Component } from '../../engine/gameobject.js';
-import { cloneModel } from '../../engine/model_cache.js';
 import { InstancedBuilding } from './instanced_building.js';
+import { getCropInstances } from '../crop_instance_registry.js';
 
 // `count` is how many crop instances spawn on the plot when it ripens —
 // each gets harvested individually for +1 yield, so a 5-count berry plot
@@ -83,14 +83,21 @@ export class FarmPlot extends Component {
 
     this._waterings     = 0;     // discrete tend visits required to fully grow
 
-    // One entry per spawned crop instance. Each harvest pops the last entry
-    // and removes its mesh; when the array empties we restart the cycle.
-    this._cropMeshes    = [];    // [{ mesh, baseScale }]
+    // Instanced crop slots. Each entry holds { slotId, baseScale, offset }
+    // where slotId is the handle into the CropInstanceRegistry.
+    this._cropSlots     = [];
     this._cropPulseT    = BOINK_DURATION;
+    this._lastScale     = -1;    // cached to avoid redundant matrix writes
 
     this._waterPulseT = PULSE_DURATION;
     this._baseColor   = new THREE.Color(0xffffff);
     this._tintColor   = new THREE.Color();
+
+    // Reusable temporaries for crop matrix composition
+    this._tmpMatrix = new THREE.Matrix4();
+    this._tmpPos    = new THREE.Vector3();
+    this._tmpQuat   = new THREE.Quaternion();
+    this._tmpScale  = new THREE.Vector3();
   }
 
   get state() { return this._state; }
@@ -152,7 +159,7 @@ export class FarmPlot extends Component {
         && this.growth >= this._growthTarget - 1e-4;
   }
   isReadyToHarvest() {
-    return this._state === FARM_STATE.GROWN && this._cropMeshes.length > 0;
+    return this._state === FARM_STATE.GROWN && this._cropSlots.length > 0;
   }
   yieldType()        { return CROP_YIELDS[this.crop] ?? null; }
 
@@ -163,9 +170,13 @@ export class FarmPlot extends Component {
   // growing). Returns the amount taken (0 if not harvestable).
   harvestOne() {
     if (!this.isReadyToHarvest()) return 0;
-    const entry = this._cropMeshes.pop();
-    if (entry) this.gameObject.object3D.remove(entry.mesh);
-    if (this._cropMeshes.length === 0) {
+    const entry = this._cropSlots.pop();
+    if (entry) {
+      const registry = getCropInstances();
+      const url = CROP_MODELS[this.crop];
+      if (registry && url) registry.remove(url, entry.slotId);
+    }
+    if (this._cropSlots.length === 0) {
       const next = this.pendingCrop ?? this.crop;
       this._setAwaitingSeed(next);
     }
@@ -173,12 +184,13 @@ export class FarmPlot extends Component {
   }
 
   start() {
-    // Base mesh is rendered via InstancedBuilding — no per-mesh material
-    // cloning needed. Tinting goes through setColor() on the instance.
+    // Plot tile renders via InstancedBuilding (registered by the entity
+    // factory). No per-mesh material cloning — tinting goes through
+    // setColor() on the InstancedBuilding instance.
   }
 
   destroy() {
-    this._removeCropMeshes();
+    this._removeCropSlots();
   }
 
   update(dt) {
@@ -201,19 +213,24 @@ export class FarmPlot extends Component {
 
     // Crop scale follows growth continuously. Boink overlays a brief pulse
     // each time water() resets _cropPulseT.
-    if (this._cropMeshes.length > 0) {
+    if (this._cropSlots.length > 0) {
       let mul = MIN_VISIBLE_SCALE + (1 - MIN_VISIBLE_SCALE) * this.growth;
       if (this._cropPulseT < BOINK_DURATION) {
         this._cropPulseT += dt;
         const p = Math.min(1, this._cropPulseT / BOINK_DURATION);
         mul *= 1 + 0.22 * Math.sin(p * Math.PI); // overshoot+settle
       }
-      for (const entry of this._cropMeshes) {
-        entry.mesh.scale.setScalar(entry.baseScale * mul);
+
+      // Only update instance matrices if the effective scale changed.
+      if (Math.abs(mul - this._lastScale) > 1e-4) {
+        this._lastScale = mul;
+        this._updateCropTransforms(mul);
       }
     }
 
-    // Plot tint via instanced color — only meaningful while GROWING.
+    // Plot tint via instanced color — only meaningful while GROWING; reset to
+    // base otherwise. Goes through the InstancedBuilding component since the
+    // plot tile no longer has a per-instance material we can mutate directly.
     const ib = this.gameObject.getComponent(InstancedBuilding);
     if (ib) {
       if (this._state === FARM_STATE.GROWING) {
@@ -247,7 +264,7 @@ export class FarmPlot extends Component {
     this._growthTarget  = 0;
     this.waterLevel     = 1.0;
     this._waterings     = 0;
-    this._removeCropMeshes();
+    this._removeCropSlots();
   }
   _setAwaitingSeed(crop) {
     this._state         = FARM_STATE.AWAITING_SEED;
@@ -257,7 +274,7 @@ export class FarmPlot extends Component {
     this._growthTarget  = 0;
     this.waterLevel     = 1.0;
     this._waterings     = 0;
-    this._removeCropMeshes();
+    this._removeCropSlots();
   }
   _setGrowing() {
     this._state         = FARM_STATE.GROWING;
@@ -267,7 +284,7 @@ export class FarmPlot extends Component {
     // Start thirsty so the first tend task posts immediately and the player
     // sees the colony engage with the new plot right away.
     this.waterLevel = 0;
-    this._spawnCropMeshes();
+    this._spawnCropSlots();
   }
   _setGrown() {
     this._state = FARM_STATE.GROWN;
@@ -278,29 +295,65 @@ export class FarmPlot extends Component {
     }
   }
 
-  _spawnCropMeshes() {
-    this._removeCropMeshes();
+  _spawnCropSlots() {
+    this._removeCropSlots();
     const url = CROP_MODELS[this.crop];
     if (!url) return;
+    const registry = getCropInstances();
+    if (!registry) return;
+
     const count  = cropCount(this.crop);
     const layout = layoutFor(count);
     const baseS  = baseScaleFor(count);
+    const plotPos = this.gameObject.object3D.position;
+
     for (const offset of layout) {
-      let mesh;
-      try { mesh = cloneModel(url); } catch { continue; } // model not loaded — silently skip this one
-      mesh.scale.setScalar(baseS * MIN_VISIBLE_SCALE);
-      mesh.position.set(offset.x, CROP_Y_OFFSET, offset.z);
-      this.gameObject.object3D.add(mesh);
-      this._cropMeshes.push({ mesh, baseScale: baseS });
+      const scale = baseS * MIN_VISIBLE_SCALE;
+      this._tmpPos.set(plotPos.x + offset.x, plotPos.y + CROP_Y_OFFSET, plotPos.z + offset.z);
+      this._tmpQuat.identity();
+      this._tmpScale.set(scale, scale, scale);
+      this._tmpMatrix.compose(this._tmpPos, this._tmpQuat, this._tmpScale);
+      const slotId = registry.add(url, this._tmpMatrix);
+      if (slotId != null) {
+        this._cropSlots.push({ slotId, baseScale: baseS, offset });
+      }
     }
+    this._lastScale = MIN_VISIBLE_SCALE;
     this._cropPulseT = 0; // boink on spawn
   }
 
-  _removeCropMeshes() {
-    for (const { mesh } of this._cropMeshes) {
-      this.gameObject.object3D.remove(mesh);
+  _updateCropTransforms(mul) {
+    const url = CROP_MODELS[this.crop];
+    if (!url) return;
+    const registry = getCropInstances();
+    if (!registry) return;
+
+    const plotPos = this.gameObject.object3D.position;
+    for (const entry of this._cropSlots) {
+      const scale = entry.baseScale * mul;
+      this._tmpPos.set(
+        plotPos.x + entry.offset.x,
+        plotPos.y + CROP_Y_OFFSET,
+        plotPos.z + entry.offset.z,
+      );
+      this._tmpQuat.identity();
+      this._tmpScale.set(scale, scale, scale);
+      this._tmpMatrix.compose(this._tmpPos, this._tmpQuat, this._tmpScale);
+      registry.update(url, entry.slotId, this._tmpMatrix);
     }
-    this._cropMeshes = [];
+  }
+
+  _removeCropSlots() {
+    if (this._cropSlots.length === 0) return;
+    const url = CROP_MODELS[this.crop];
+    const registry = getCropInstances();
+    if (registry && url) {
+      for (const entry of this._cropSlots) {
+        registry.remove(url, entry.slotId);
+      }
+    }
+    this._cropSlots = [];
+    this._lastScale = -1;
   }
 
   getContextMenu() {
@@ -317,7 +370,7 @@ export class FarmPlot extends Component {
         break;
       case FARM_STATE.GROWN: {
         const total = cropCount(this.crop);
-        const left  = this._cropMeshes.length;
+        const left  = this._cropSlots.length;
         stateText = `Ripe: ${cropName(this.crop)} (${left} / ${total})`;
         break;
       }
