@@ -6,6 +6,37 @@ import { Component } from '../engine/gameobject.js';
 
 const HISTORY_SIZE = 120; // frames of history for the graph
 const TARGET_MS    = 1000 / 60; // 60fps budget — matches the green line on the graph
+const STATS_WINDOW = 60;        // frames over which per-component avg/max are computed (~1s at 60fps)
+
+// Ring buffer of samples used for the per-component avg/max columns. The
+// breakdown jitters frame to frame (a frame with one extra plan() call
+// can multiply ms 5×), and the eye can't read instantaneous values that
+// flicker — averaging over a second smooths it.
+class StatsRing {
+  constructor(size) {
+    this.size = size;
+    this.buf  = new Float32Array(size);
+    this.idx  = 0;
+    this.count = 0;
+  }
+  push(v) {
+    this.buf[this.idx % this.size] = v;
+    this.idx++;
+    if (this.count < this.size) this.count++;
+  }
+  avg() {
+    if (this.count === 0) return 0;
+    let sum = 0;
+    for (let i = 0; i < this.count; i++) sum += this.buf[i];
+    return sum / this.count;
+  }
+  max() {
+    if (this.count === 0) return 0;
+    let m = this.buf[0];
+    for (let i = 1; i < this.count; i++) if (this.buf[i] > m) m = this.buf[i];
+    return m;
+  }
+}
 
 export class PerfOverlay {
   constructor(game, debug) {
@@ -17,6 +48,8 @@ export class PerfOverlay {
     this._fpsFrames = 0;
     this._fps = 0;
     this._lastFpsUpdate = 0;
+    // Per-component-name rolling stats for the breakdown rows.
+    this._compStats = new Map();
 
     // Component-level profiling is gated to when the overlay is visible —
     // the per-update performance.now() pair has measurable cost on hot loops
@@ -98,12 +131,31 @@ export class PerfOverlay {
       `Draw calls: ${info.render.calls}  tris: ${info.render.triangles}  ` +
       `geom: ${info.memory.geometries}  tex: ${info.memory.textures}`;
 
-    // Per-component update costs, alphabetical for stable row order
+    // Per-component update costs, alphabetical for stable row order.
+    // Columns: avg / max ms over the last STATS_WINDOW frames, then current
+    // count. Smoothing over a window stops the rows from flickering when
+    // costs spike on individual frames.
     const comps = timing.components;
     if (comps && comps.length) {
-      text += '\nUpdate breakdown (ms / count):';
+      const seen = new Set();
       for (const c of comps) {
-        text += `\n  ${c.name.padEnd(16)} ${c.ms.toFixed(2).padStart(5)}  x${c.count}`;
+        let stats = this._compStats.get(c.name);
+        if (!stats) { stats = new StatsRing(STATS_WINDOW); this._compStats.set(c.name, stats); }
+        stats.push(c.ms);
+        seen.add(c.name);
+      }
+      // Push a 0 sample for components that didn't tick this frame so their
+      // historical max decays once the work goes away.
+      for (const [name, stats] of this._compStats) {
+        if (!seen.has(name)) stats.push(0);
+      }
+
+      text += '\nUpdate breakdown (avg/max ms · count):';
+      for (const c of comps) {
+        const stats = this._compStats.get(c.name);
+        const avg = stats.avg();
+        const max = stats.max();
+        text += `\n  ${c.name.padEnd(16)} ${avg.toFixed(2).padStart(5)} / ${max.toFixed(2).padStart(5)}  x${c.count}`;
       }
     }
 
