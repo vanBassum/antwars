@@ -3,11 +3,12 @@ import { FarmPlot } from './components/farm_plot.js';
 import { EggPickup } from './components/egg_pickup.js';
 import { TrainingHut } from './components/training_hut.js';
 import { FeedingTray } from './components/feeding_tray.js';
+import { ConstructionSite } from './components/construction_site.js';
 
 // Per-target concurrent-worker caps. Resource nodes get 2 (multiple ants
 // share a sugar pile reasonably); farms get 1 per work kind (one watering
 // or one seed delivery at a time is enough).
-const MAX_CLAIMS = { harvest: 2, tend: 1, seed: 1, egg: 1, restock: 1 };
+const MAX_CLAIMS = { harvest: 2, tend: 1, seed: 1, egg: 1, restock: 1, construct: 1 };
 
 // Global egg cap: fieldEggs + inTransitEggs.
 const EGG_CAP = 10;
@@ -58,6 +59,7 @@ export class WorkManager {
     this._looseEggs     = []; // gameObjects with an EggPickup component
     this._trainingHuts  = []; // gameObjects with a TrainingHut component
     this._feedingTrays  = []; // gameObjects with a FeedingTray component
+    this._constructionSites = []; // gameObjects with a ConstructionSite component (in-progress only)
 
     // Registered workers — workers add/remove themselves so we can preempt
     // them without importing the Worker class (avoids circular deps).
@@ -131,6 +133,24 @@ export class WorkManager {
       }
     }
 
+    // Construction: in-progress sites that still need a material the player
+    // currently has in stockpile. Workers always source from the hive.
+    for (const go of this._constructionSites) {
+      const cs = go.getComponent(ConstructionSite);
+      if (!cs || cs.isComplete()) continue;
+      if ((counts.get(go) ?? 0) >= MAX_CLAIMS.construct) continue;
+      let materialType = null;
+      for (const t of cs.neededTypes()) {
+        if ((this._game.resources?.get(t) ?? 0) > 0) { materialType = t; break; }
+      }
+      if (!materialType) continue;
+      const score = this._fairScore(ant, go, 'construct', now);
+      if (score < bestScore) {
+        best = { kind: 'construct', target: go, materialType };
+        bestScore = score;
+      }
+    }
+
     // Restock: feeding trays that need sugar. Try to find a nearby sugar
     // ResourceNode first; fall back to the Anthill stockpile.
     for (const go of this._feedingTrays) {
@@ -192,6 +212,13 @@ export class WorkManager {
       const ft = c.target.getComponent(FeedingTray);
       return !!ft && ft.needsSugar();
     }
+    if (c.kind === 'construct') {
+      const cs = c.target.getComponent(ConstructionSite);
+      if (!cs || cs.isComplete()) return false;
+      if (!cs.needsMaterial(c.materialType)) return false;
+      // Stockpile must still hold at least one of the chosen type.
+      return (this._game.resources?.get(c.materialType) ?? 0) > 0;
+    }
     return false;
   }
 
@@ -229,6 +256,17 @@ export class WorkManager {
     for (const go of this._feedingTrays) {
       const ft = go.getComponent(FeedingTray);
       if (ft && ft.needsSugar()) return true;
+    }
+    return false;
+  }
+  constructAvailable() {
+    this._refreshCaches();
+    for (const go of this._constructionSites) {
+      const cs = go.getComponent(ConstructionSite);
+      if (!cs || cs.isComplete()) continue;
+      for (const t of cs.neededTypes()) {
+        if ((this._game.resources?.get(t) ?? 0) > 0) return true;
+      }
     }
     return false;
   }
@@ -273,6 +311,11 @@ export class WorkManager {
   registerWorker(worker)   { this._workers.add(worker); }
   unregisterWorker(worker) { this._workers.delete(worker); }
 
+  // Force a cache refresh on the next request — used when a component is
+  // added late (e.g. ConstructionSite completing and adding FarmPlot), since
+  // addComponent doesn't trigger the scene-listener that watches add/remove.
+  markDirty() { this._dirty = true; }
+
   // Signal all workers to re-evaluate. Called when a player-driven task is
   // queued (e.g. training request) so workers don't have to finish their
   // current ambient cycle before noticing the new high-priority work.
@@ -287,12 +330,14 @@ export class WorkManager {
     this._looseEggs     = [];
     this._trainingHuts  = [];
     this._feedingTrays  = [];
+    this._constructionSites = [];
     for (const go of this._game.gameObjects) {
-      if (go.getComponent(ResourceNode)) this._resourceNodes.push(go);
-      if (go.getComponent(FarmPlot))     this._farmPlots.push(go);
-      if (go.getComponent(EggPickup))    this._looseEggs.push(go);
-      if (go.getComponent(TrainingHut))  this._trainingHuts.push(go);
-      if (go.getComponent(FeedingTray))  this._feedingTrays.push(go);
+      if (go.getComponent(ResourceNode))     this._resourceNodes.push(go);
+      if (go.getComponent(FarmPlot))         this._farmPlots.push(go);
+      if (go.getComponent(EggPickup))        this._looseEggs.push(go);
+      if (go.getComponent(TrainingHut))      this._trainingHuts.push(go);
+      if (go.getComponent(FeedingTray))      this._feedingTrays.push(go);
+      if (go.getComponent(ConstructionSite)) this._constructionSites.push(go);
     }
     this._dirty = false;
   }
@@ -348,6 +393,12 @@ export class WorkManager {
       const ft = go.getComponent(FeedingTray);
       if (ft && ft.needsSugar()) mark(go, 'restock');
       else clear(go, 'restock');
+    }
+
+    for (const go of this._constructionSites) {
+      const cs = go.getComponent(ConstructionSite);
+      if (cs && !cs.isComplete()) mark(go, 'construct');
+      else clear(go, 'construct');
     }
 
     // Prune entries for removed gameObjects.

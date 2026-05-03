@@ -11,6 +11,25 @@ import { EggPickup } from './components/egg_pickup.js';
 import { TrainingHut } from './components/training_hut.js';
 import { FeedingTray } from './components/feeding_tray.js';
 import { Building } from './components/building.js';
+import { ConstructionSite } from './components/construction_site.js';
+
+// Helper for player-placed buildings: spawn in CONSTRUCTING state with a
+// translucent ghost overlay, deferring the gameplay component until workers
+// have delivered the construction cost. `addGameplay(go)` is called by the
+// ConstructionSite once complete.
+function attachConstruction(go, def, addGameplay) {
+  go.addComponent(new ConstructionSite({
+    remaining: def.constructionCost,
+    def,
+    onComplete: () => {
+      const c = addGameplay(go);
+      // Components added late don't get start() automatically — game.add only
+      // calls start once at scene insertion time. Trigger it ourselves so the
+      // gameplay component initialises (visuals, state, registrations).
+      c?.start?.();
+    },
+  }));
+}
 
 export const ENTITY_DEFS = [
   new EntityDef({
@@ -55,10 +74,11 @@ export const ENTITY_DEFS = [
   new EntityDef({
     id: 'farm_plot', name: 'Farm Plot', icon: '🌱', iconUrl: 'assets/icons/FarmPlot.png', yOffset: 0, occupiesHex: true,
     modelUrl: 'assets/models/FarmPlot.glb',
+    constructionCost: { wood: 5 },
     createObject() {
       const go = new GameObject('Farm Plot');
       go.object3D.add(cloneModel(this.modelUrl));
-      go.addComponent(new FarmPlot());
+      attachConstruction(go, this, (g) => g.addComponent(new FarmPlot()));
       go.addComponent(new Building(this));
       return go;
     },
@@ -106,10 +126,11 @@ export const ENTITY_DEFS = [
     id: 'training_hut', name: 'Training Hut', icon: '🏠', iconUrl: 'assets/icons/TrainingHut.png', yOffset: 0, occupiesHex: true,
     entrance: [0, 1], // south neighbor — ants enter/leave through the front door
     modelUrl: 'assets/models/TrainingHut.glb',
+    constructionCost: { wood: 10 },
     createObject() {
       const go = new GameObject('Training Hut');
       go.object3D.add(cloneModel(this.modelUrl));
-      go.addComponent(new TrainingHut());
+      attachConstruction(go, this, (g) => g.addComponent(new TrainingHut()));
       go.addComponent(new Building(this));
       return go;
     },
@@ -117,10 +138,11 @@ export const ENTITY_DEFS = [
   new EntityDef({
     id: 'feeding_tray', name: 'Feeding Tray', icon: '🍯', iconUrl: 'assets/icons/FeedingTray.png', yOffset: 0, occupiesHex: true,
     modelUrl: 'assets/models/FeedingTray.glb',
+    constructionCost: { wood: 5 },
     createObject() {
       const go = new GameObject('Feeding Tray');
       go.object3D.add(cloneModel(this.modelUrl));
-      go.addComponent(new FeedingTray());
+      attachConstruction(go, this, (g) => g.addComponent(new FeedingTray()));
       go.addComponent(new Building(this));
       return go;
     },

@@ -100,14 +100,18 @@ function startPlacement(defId, commit) {
 // Worker ants are no longer spawned directly from the ActionBar — they come
 // from the Queen → egg → Training Hut loop. The "Train Worker" button on the
 // Training Hut's context menu queues the request.
+// Construction model: `cost` gates placement (button is disabled when the
+// stockpile can't cover it) but is NOT deducted on commit — workers pull one
+// unit at a time from the stockpile until the ConstructionSite is full.
+const noDeductCommit = () => {};
 const actionBar = new ActionBar(game.resources, [
   {
     icon:      '🌱',
     iconUrl:   'assets/icons/FarmPlot.png',
     label:     'Farm Plot',
-    costLabel: '10 🪵',
-    cost:      { wood: 10 },
-    onActivate: (commit) => startPlacement('farm_plot', commit),
+    costLabel: '5 🪵',
+    cost:      { wood: 5 },
+    onActivate: () => startPlacement('farm_plot', noDeductCommit),
   },
   {
     icon:      '🏠',
@@ -115,7 +119,7 @@ const actionBar = new ActionBar(game.resources, [
     label:     'Training Hut',
     costLabel: '10 🪵',
     cost:      { wood: 10 },
-    onActivate: (commit) => startPlacement('training_hut', commit),
+    onActivate: () => startPlacement('training_hut', noDeductCommit),
   },
   {
     icon:      '🍯',
@@ -123,7 +127,7 @@ const actionBar = new ActionBar(game.resources, [
     label:     'Feeding Tray',
     costLabel: '5 🪵',
     cost:      { wood: 5 },
-    onActivate: (commit) => startPlacement('feeding_tray', commit),
+    onActivate: () => startPlacement('feeding_tray', noDeductCommit),
   },
 ]);
 

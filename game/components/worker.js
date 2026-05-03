@@ -10,12 +10,14 @@ import { TendTask } from './tend_task.js';
 import { SeedTask } from './seed_task.js';
 import { DeliverEggTask } from './deliver_egg_task.js';
 import { DeliverSugarTask } from './deliver_sugar_task.js';
+import { DeliverMaterialTask } from './deliver_material_task.js';
 
 import { buildHarvestActions, HARVEST_GOAL } from '../cycles/harvest_cycle.js';
 import { buildTendActions,    TEND_GOAL    } from '../cycles/tend_cycle.js';
 import { buildSeedActions,    SEED_GOAL    } from '../cycles/seed_cycle.js';
 import { buildDeliverEggActions, DELIVER_EGG_GOAL } from '../cycles/deliver_egg_cycle.js';
 import { buildRestockActions, RESTOCK_GOAL } from '../cycles/restock_cycle.js';
+import { buildConstructActions, CONSTRUCT_GOAL } from '../cycles/deliver_material_cycle.js';
 
 const WANDER_RADIUS = 3;
 
@@ -51,9 +53,10 @@ export class Worker extends Component {
     this._harvest = new HarvestTask();
     this._tend    = new TendTask();
     this._seed    = new SeedTask();
-    this._egg     = new DeliverEggTask();
-    this._restock = new DeliverSugarTask();
-    this._blob    = null;
+    this._egg       = new DeliverEggTask();
+    this._restock   = new DeliverSugarTask();
+    this._construct = new DeliverMaterialTask();
+    this._blob      = null;
     this._wanderTimer = null;
 
     // Per-ant lateral path offset — picked once, in a small ring around
@@ -88,24 +91,26 @@ export class Worker extends Component {
       ...buildSeedActions   ({ task: this._seed,    setCarrying, onCycleFail }),
       ...buildDeliverEggActions({ task: this._egg,  setCarrying, onCycleFail }),
       ...buildRestockActions({ task: this._restock, game, hiveGO, setCarrying, onCycleFail }),
+      ...buildConstructActions({ task: this._construct, game, setCarrying, onCycleFail }),
     ];
 
     const agent = this.gameObject.getComponent(GOAPAgent);
     agent.actions    = actions;
     agent.worldState = {
-      hasResource: false, hasWater: false, hasSeed: false, hasEgg: false, hasSugar: false,
+      hasResource: false, hasWater: false, hasSeed: false, hasEgg: false, hasSugar: false, hasMaterial: false,
       atResource: false, atHive: false, atFarm: false, atEgg: false, atTrainingHut: false,
-      atSugarSource: false, atTray: false,
-      delivered: false, tended: false, seeded: false, eggDelivered: false, sugarDelivered: false,
+      atSugarSource: false, atTray: false, atSite: false,
+      delivered: false, tended: false, seeded: false, eggDelivered: false, sugarDelivered: false, materialDelivered: false,
       resourceAvailable: false, farmAvailable: false, seedAvailable: false, eggAvailable: false,
-      restockAvailable: false,
+      restockAvailable: false, constructAvailable: false,
     };
     agent.onGoalReached = () => {
       agent.worldState.delivered    = false;
       agent.worldState.tended       = false;
       agent.worldState.seeded       = false;
-      agent.worldState.eggDelivered   = false;
-      agent.worldState.sugarDelivered = false;
+      agent.worldState.eggDelivered     = false;
+      agent.worldState.sugarDelivered   = false;
+      agent.worldState.materialDelivered = false;
       this._releaseClaim();
       this._pickNextCycle();
     };
@@ -138,6 +143,7 @@ export class Worker extends Component {
       this._seed.clear();
       this._egg.clear();
       this._restock.clear();
+      this._construct.clear();
       agent.goal = HARVEST_GOAL; // unreachable without resources — wander takes over
       return;
     }
@@ -149,6 +155,7 @@ export class Worker extends Component {
       this._seed.clear();
       this._egg.clear();
       this._restock.clear();
+      this._construct.clear();
       agent.goal = HARVEST_GOAL;
     } else if (claim.kind === 'tend') {
       this._tend.target = claim.target;
@@ -156,6 +163,7 @@ export class Worker extends Component {
       this._seed.clear();
       this._egg.clear();
       this._restock.clear();
+      this._construct.clear();
       agent.goal = TEND_GOAL;
     } else if (claim.kind === 'egg') {
       this._egg.egg         = claim.target;
@@ -164,6 +172,7 @@ export class Worker extends Component {
       this._tend.clear();
       this._seed.clear();
       this._restock.clear();
+      this._construct.clear();
       agent.goal = DELIVER_EGG_GOAL;
     } else if (claim.kind === 'restock') {
       this._restock.tray   = claim.target;
@@ -173,13 +182,24 @@ export class Worker extends Component {
       this._tend.clear();
       this._seed.clear();
       this._egg.clear();
+      this._construct.clear();
       agent.goal = RESTOCK_GOAL;
+    } else if (claim.kind === 'construct') {
+      this._construct.site         = claim.target;
+      this._construct.materialType = claim.materialType;
+      this._harvest.clear();
+      this._tend.clear();
+      this._seed.clear();
+      this._egg.clear();
+      this._restock.clear();
+      agent.goal = CONSTRUCT_GOAL;
     } else { // seed
       this._seed.target = claim.target;
       this._harvest.clear();
       this._tend.clear();
       this._egg.clear();
       this._restock.clear();
+      this._construct.clear();
       agent.goal = SEED_GOAL;
     }
   }
@@ -204,11 +224,13 @@ export class Worker extends Component {
     this._seed.clear();
     this._egg.clear();
     this._restock.clear();
+    this._construct.clear();
     if (!agent.worldState.hasResource) {
-      agent.worldState.hasWater = false;
-      agent.worldState.hasSeed  = false;
-      agent.worldState.hasEgg   = false;
-      agent.worldState.hasSugar = false;
+      agent.worldState.hasWater    = false;
+      agent.worldState.hasSeed     = false;
+      agent.worldState.hasEgg      = false;
+      agent.worldState.hasSugar    = false;
+      agent.worldState.hasMaterial = false;
       this._setCarrying(null);
     }
     agent.invalidate();
@@ -229,6 +251,7 @@ export class Worker extends Component {
     agent.worldState.seedAvailable     = this._wm.seedAvailable();
     agent.worldState.eggAvailable      = this._wm.eggAvailable();
     agent.worldState.restockAvailable  = this._wm.restockAvailable();
+    agent.worldState.constructAvailable = this._wm.constructAvailable();
   }
 
   update(dt) {
@@ -242,11 +265,12 @@ export class Worker extends Component {
     // entity removed), abandon the cycle. _abandonCycle honors the carry
     // state — if we're holding a gathered resource, we'll still go deposit
     // it before going idle.
-    if ((this._harvest.hasTarget() && !this._harvest.isStillValid()) ||
-        (this._tend.hasTarget()    && !this._tend.isStillValid())    ||
-        (this._seed.hasTarget()    && !this._seed.isStillValid())    ||
-        (this._egg.hasTarget()     && !this._egg.isStillValid())    ||
-        (this._restock.hasTarget() && !this._restock.isStillValid())) {
+    if ((this._harvest.hasTarget()   && !this._harvest.isStillValid())   ||
+        (this._tend.hasTarget()      && !this._tend.isStillValid())      ||
+        (this._seed.hasTarget()      && !this._seed.isStillValid())      ||
+        (this._egg.hasTarget()       && !this._egg.isStillValid())       ||
+        (this._restock.hasTarget()   && !this._restock.isStillValid())   ||
+        (this._construct.hasTarget() && !this._construct.isStillValid())) {
       this._abandonCycle();
     }
 
@@ -288,11 +312,12 @@ export class Worker extends Component {
     const task  = agent?.currentActionName ?? 'idle';
 
     let target = '—';
-    if (this._harvest.target)      target = this._harvest.target.name ?? 'resource';
-    else if (this._tend.target)    target = this._tend.target.name    ?? 'farm';
-    else if (this._seed.target)    target = this._seed.target.name    ?? 'farm';
-    else if (this._egg.egg)        target = 'egg → training hut';
-    else if (this._restock.tray)   target = 'sugar → feeding tray';
+    if (this._harvest.target)        target = this._harvest.target.name ?? 'resource';
+    else if (this._tend.target)      target = this._tend.target.name    ?? 'farm';
+    else if (this._seed.target)      target = this._seed.target.name    ?? 'farm';
+    else if (this._egg.egg)          target = 'egg → training hut';
+    else if (this._restock.tray)     target = 'sugar → feeding tray';
+    else if (this._construct.site)   target = `${this._construct.materialType ?? 'material'} → ${this._construct.site.name ?? 'site'}`;
 
     let carrying = 'empty';
     if (ws.hasResource && this._harvest.type) carrying = this._harvest.type;
@@ -300,6 +325,7 @@ export class Worker extends Component {
     else if (ws.hasSeed)                      carrying = 'seed';
     else if (ws.hasEgg)                       carrying = 'egg';
     else if (ws.hasSugar)                     carrying = 'sugar (restock)';
+    else if (ws.hasMaterial)                  carrying = `${this._construct.materialType ?? 'material'} (build)`;
 
     return { task, target, carrying };
   }
