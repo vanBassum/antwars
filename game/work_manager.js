@@ -49,16 +49,21 @@ export class WorkManager {
     this._game     = game;
     this._claims   = new Map(); // ant gameObject → claim
 
-    // Index caches — rebuilt fresh on every public call. Cheap at colony
-    // sizes (<100 entities) and avoids the whole class of "I forgot to
-    // mark the cache dirty when X happened" bugs (which bit us when
-    // ConstructionSite added gameplay components mid-frame).
+    // Index caches + cheap availability booleans. Rebuilt at most once per
+    // frame (gated by game.elapsed) to keep Worker._refreshAvailability cheap
+    // even at 150+ ants — without this gate, six availability queries × 150
+    // workers × ~200 entities × 6 getComponent each = ~1M lookups/frame.
+    this._lastRefreshTick   = -1;
     this._resourceNodes     = [];
     this._farmPlots         = [];
     this._looseEggs         = [];
     this._trainingHuts      = [];
     this._feedingTrays      = [];
     this._constructionSites = [];
+    this._availability = {
+      resource: false, farm: false, seed: false,
+      egg: false, restock: false, construct: false,
+    };
 
     // Registered workers — workers add/remove themselves so we can preempt
     // them without importing the Worker class (avoids circular deps).
@@ -237,62 +242,13 @@ export class WorkManager {
   }
 
   // ── Cheap availability queries (used by Worker per-frame) ─────────────
-  resourceAvailable() {
-    this._refreshCaches();
-    for (const go of this._resourceNodes) {
-      const rn = go.getComponent(ResourceNode);
-      if (rn && !rn.isEmpty) return true;
-    }
-    for (const go of this._farmPlots) {
-      const fp = go.getComponent(FarmPlot);
-      if (fp && fp.isReadyToHarvest()) return true;
-    }
-    return false;
-  }
-  farmAvailable() {
-    this._refreshCaches();
-    for (const go of this._farmPlots) {
-      const fp = go.getComponent(FarmPlot);
-      if (fp && fp.needsAttention()) return true;
-    }
-    return false;
-  }
-  seedAvailable() {
-    this._refreshCaches();
-    for (const go of this._farmPlots) {
-      const fp = go.getComponent(FarmPlot);
-      if (fp && fp.needsSeed()) return true;
-    }
-    return false;
-  }
-  restockAvailable() {
-    this._refreshCaches();
-    for (const go of this._feedingTrays) {
-      const ft = go.getComponent(FeedingTray);
-      if (ft && ft.needsSugar()) return true;
-    }
-    return false;
-  }
-  constructAvailable() {
-    this._refreshCaches();
-    for (const go of this._constructionSites) {
-      const cs = go.getComponent(ConstructionSite);
-      if (!cs || cs.isComplete()) continue;
-      for (const t of cs.neededTypes()) {
-        if ((this._game.resources?.get(t) ?? 0) > 0) return true;
-      }
-    }
-    return false;
-  }
-  eggAvailable() {
-    this._refreshCaches();
-    if (this._looseEggs.length === 0) return false;
-    for (const go of this._trainingHuts) {
-      const th = go.getComponent(TrainingHut);
-      if (th && th.hasPendingRequest()) return true;
-    }
-    return false;
-  }
+  // All read from the per-frame cache populated in _refreshCaches.
+  resourceAvailable()  { this._refreshCaches(); return this._availability.resource; }
+  farmAvailable()      { this._refreshCaches(); return this._availability.farm; }
+  seedAvailable()      { this._refreshCaches(); return this._availability.seed; }
+  restockAvailable()   { this._refreshCaches(); return this._availability.restock; }
+  constructAvailable() { this._refreshCaches(); return this._availability.construct; }
+  eggAvailable()       { this._refreshCaches(); return this._availability.egg; }
 
   // Number of loose eggs not yet claimed for delivery.
   availableEggs() {
@@ -333,6 +289,10 @@ export class WorkManager {
   }
 
   _refreshCaches() {
+    const tick = this._game.elapsed ?? 0;
+    if (tick === this._lastRefreshTick) return;
+    this._lastRefreshTick = tick;
+
     this._resourceNodes = [];
     this._farmPlots     = [];
     this._looseEggs     = [];
@@ -346,6 +306,60 @@ export class WorkManager {
       if (go.getComponent(TrainingHut))      this._trainingHuts.push(go);
       if (go.getComponent(FeedingTray))      this._feedingTrays.push(go);
       if (go.getComponent(ConstructionSite)) this._constructionSites.push(go);
+    }
+    this._refreshAvailability();
+  }
+
+  // Recompute the six "is there any work of kind X?" booleans that Workers
+  // poll every frame. Cached on this._availability so a frame's worth of
+  // worker queries cost one pass each, not 150.
+  _refreshAvailability() {
+    const av = this._availability;
+
+    av.resource = false;
+    for (const go of this._resourceNodes) {
+      const rn = go.getComponent(ResourceNode);
+      if (rn && !rn.isEmpty) { av.resource = true; break; }
+    }
+    if (!av.resource) {
+      for (const go of this._farmPlots) {
+        const fp = go.getComponent(FarmPlot);
+        if (fp && fp.isReadyToHarvest()) { av.resource = true; break; }
+      }
+    }
+
+    av.farm = false;
+    av.seed = false;
+    for (const go of this._farmPlots) {
+      const fp = go.getComponent(FarmPlot);
+      if (!fp) continue;
+      if (!av.farm && fp.needsAttention()) av.farm = true;
+      if (!av.seed && fp.needsSeed())      av.seed = true;
+      if (av.farm && av.seed) break;
+    }
+
+    av.restock = false;
+    for (const go of this._feedingTrays) {
+      const ft = go.getComponent(FeedingTray);
+      if (ft && ft.needsSugar()) { av.restock = true; break; }
+    }
+
+    av.construct = false;
+    for (const go of this._constructionSites) {
+      const cs = go.getComponent(ConstructionSite);
+      if (!cs || cs.isComplete()) continue;
+      for (const t of cs.neededTypes()) {
+        if ((this._game.resources?.get(t) ?? 0) > 0) { av.construct = true; break; }
+      }
+      if (av.construct) break;
+    }
+
+    av.egg = false;
+    if (this._looseEggs.length > 0) {
+      for (const go of this._trainingHuts) {
+        const th = go.getComponent(TrainingHut);
+        if (th && th.hasPendingRequest()) { av.egg = true; break; }
+      }
     }
   }
 
