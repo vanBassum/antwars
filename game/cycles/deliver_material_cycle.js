@@ -15,7 +15,7 @@ class TakeMaterialAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = TAKE_DURATION;
-    this.preconditions = { atHive: true, hasMaterial: false, constructAvailable: true };
+    this.preconditions = { location: 'hive', hasMaterial: false, constructAvailable: true };
     this.effects       = { hasMaterial: true };
   }
   enter() { this._t = 0; }
@@ -43,7 +43,7 @@ class DepositMaterialAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = DROP_DURATION;
-    this.preconditions = { atSite: true, hasMaterial: true };
+    this.preconditions = { location: 'site', hasMaterial: true };
     this.effects       = { hasMaterial: false, materialDelivered: true };
   }
   enter() { this._t = 0; }
@@ -53,7 +53,7 @@ class DepositMaterialAction extends Action {
       if (!this._task.dropOff()) {
         this._task.clear();
         this._onFailure?.();
-        agent.worldState.atSite = false;
+        agent.worldState.location = null;
         agent.invalidate();
         return false;
       }
@@ -65,7 +65,7 @@ class DepositMaterialAction extends Action {
 }
 
 // Build the construction-delivery cycle. The shared GoToHive action (registered
-// directly on the worker) satisfies the atHive precondition automatically.
+// directly on the worker) satisfies the location:'hive' precondition.
 //
 //   GoToHive (shared) → TakeMaterial → GoToSite → DepositMaterial
 export function buildConstructActions({ task, game, setCarrying, onCycleFail }) {
@@ -74,8 +74,8 @@ export function buildConstructActions({ task, game, setCarrying, onCycleFail }) 
       () => setCarrying(task.materialType ?? 'wood'),
       onCycleFail),
     new GoToAction('GoToSite', () => task.site,
-      { hasMaterial: true, atSite: false },
-      { atSite: true, atHive: false, atFarm: false },
+      { hasMaterial: true },
+      { location: 'site' },
       onCycleFail),
     new DepositMaterialAction(task,
       () => { setCarrying(null); task.clear(); },

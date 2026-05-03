@@ -15,7 +15,7 @@ class PickupEggAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = PICKUP_DURATION;
-    this.preconditions = { atEgg: true, hasEgg: false, eggAvailable: true };
+    this.preconditions = { location: 'egg', hasEgg: false, eggAvailable: true };
     this.effects       = { hasEgg: true };
   }
   enter() { this._t = 0; }
@@ -25,7 +25,7 @@ class PickupEggAction extends Action {
       if (!this._task.pickUp()) {
         this._task.clear();
         this._onFailure?.();
-        agent.worldState.atEgg = false;
+        agent.worldState.location = null;
         agent.invalidate();
         return false;
       }
@@ -44,7 +44,7 @@ class DepositEggAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = DROP_DURATION;
-    this.preconditions = { atTrainingHut: true, hasEgg: true };
+    this.preconditions = { location: 'trainingHut', hasEgg: true };
     this.effects       = { hasEgg: false, eggDelivered: true };
   }
   enter() { this._t = 0; }
@@ -54,7 +54,7 @@ class DepositEggAction extends Action {
       if (!this._task.dropOff()) {
         this._task.clear();
         this._onFailure?.();
-        agent.worldState.atTrainingHut = false;
+        agent.worldState.location = null;
         agent.invalidate();
         return false;
       }
@@ -69,15 +69,15 @@ class DepositEggAction extends Action {
 export function buildDeliverEggActions({ task, setCarrying, onCycleFail }) {
   return [
     new GoToAction('GoToEgg', () => task.egg,
-      { hasEgg: false, atEgg: false, eggAvailable: true },
-      { atEgg: true, atHive: false, atTrainingHut: false },
+      { hasEgg: false, eggAvailable: true },
+      { location: 'egg' },
       onCycleFail),
     new PickupEggAction(task,
       () => setCarrying('egg'),
       onCycleFail),
     new GoToAction('GoToTrainingHut', () => task.trainingHut,
-      { hasEgg: true, atTrainingHut: false },
-      { atTrainingHut: true, atEgg: false, atHive: false },
+      { hasEgg: true },
+      { location: 'trainingHut' },
       onCycleFail),
     new DepositEggAction(task,
       () => { setCarrying(null); task.clear(); },

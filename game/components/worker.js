@@ -77,16 +77,14 @@ export class Worker extends Component {
     const onCycleFail = () => this._abandonCycle();
     const creditDeposit = (type, amount) => game.resources?.add(type, amount);
 
-    // Shared travel: GoToHive — open precondition so all three cycles can
-    // pull it into their plan whenever they need atHive=true. Effects must
-    // null EVERY other "at" location flag, otherwise stale ones poison the
-    // next plan: e.g. atSite stays true after a construction deposit, and
-    // the planner then skips GoToSite on the next trip — the worker walks
-    // to the hive, takes wood, and immediately fires DepositMaterial right
-    // there because atSite=true is still satisfied in worldState.
+    // Shared travel: GoToHive — open precondition so any cycle can pull it
+    // into the plan whenever location:'hive' is needed. Single-field location
+    // means "I'm at the hive" automatically excludes "I'm at the farm" etc.,
+    // so we never lose track and the planner can't be tricked by a stale
+    // co-existing flag.
     const goToHive = new GoToAction('GoToHive', hiveGO,
-      { atHive: false },
-      { atHive: true, atResource: false, atFarm: false, atEgg: false, atTrainingHut: false, atSugarSource: false, atTray: false, atSite: false },
+      {},
+      { location: 'hive' },
       onCycleFail);
 
     const actions = [
@@ -102,10 +100,15 @@ export class Worker extends Component {
     const agent = this.gameObject.getComponent(GOAPAgent);
     agent.actions    = actions;
     agent.worldState = {
+      // Carry slot — one boolean per intent. Mutually exclusive in practice
+      // (see follow-up refactor for a single `carrying` enum).
       hasResource: false, hasWater: false, hasSeed: false, hasEgg: false, hasSugar: false, hasMaterial: false,
-      atResource: false, atHive: false, atFarm: false, atEgg: false, atTrainingHut: false,
-      atSugarSource: false, atTray: false, atSite: false,
+      // Where the worker is — single enum field, mutually exclusive by
+      // construction. null until a GoToX completes.
+      location: null,
+      // Per-cycle goal markers, reset in onGoalReached.
       delivered: false, tended: false, seeded: false, eggDelivered: false, sugarDelivered: false, materialDelivered: false,
+      // Availability flags refreshed each frame from WorkManager.
       resourceAvailable: false, farmAvailable: false, seedAvailable: false, eggAvailable: false,
       restockAvailable: false, constructAvailable: false,
     };
@@ -372,6 +375,11 @@ export class Worker extends Component {
     if (!path || path.length < 2) return;
 
     ant.getComponent(Mover).moveAlong(smoothPath(grid, ant.position, path));
+    // Wander bypasses GOAP, so any cached location in worldState is now
+    // stale — null it so the next plan re-walks via a real GoTo action
+    // instead of assuming we're still where we last successfully arrived.
+    const agent = this.gameObject.getComponent(GOAPAgent);
+    if (agent) agent.worldState.location = null;
   }
 
   _setCarrying(type) {

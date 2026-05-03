@@ -15,7 +15,7 @@ class TakeSugarAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = TAKE_DURATION;
-    this.preconditions = { atSugarSource: true, hasSugar: false, restockAvailable: true };
+    this.preconditions = { location: 'sugarSource', hasSugar: false, restockAvailable: true };
     this.effects       = { hasSugar: true };
   }
   enter() { this._t = 0; }
@@ -25,7 +25,7 @@ class TakeSugarAction extends Action {
       if (!this._task.takeSugar(this._game)) {
         this._task.clear();
         this._onFailure?.();
-        agent.worldState.atSugarSource = false;
+        agent.worldState.location = null;
         agent.invalidate();
         return false;
       }
@@ -44,7 +44,7 @@ class DepositSugarAction extends Action {
     this._onSuccess = onSuccess;
     this._onFailure = onFailure;
     this._duration  = DROP_DURATION;
-    this.preconditions = { atTray: true, hasSugar: true };
+    this.preconditions = { location: 'tray', hasSugar: true };
     this.effects       = { hasSugar: false, sugarDelivered: true };
   }
   enter() { this._t = 0; }
@@ -54,7 +54,7 @@ class DepositSugarAction extends Action {
       if (!this._task.dropOff()) {
         this._task.clear();
         this._onFailure?.();
-        agent.worldState.atTray = false;
+        agent.worldState.location = null;
         agent.invalidate();
         return false;
       }
@@ -75,15 +75,15 @@ export function buildRestockActions({ task, game, hiveGO, setCarrying, onCycleFa
 
   return [
     new GoToAction('GoToSugarSource', sugarTarget,
-      { hasSugar: false, atSugarSource: false, restockAvailable: true },
-      { atSugarSource: true, atHive: false, atTray: false },
+      { hasSugar: false, restockAvailable: true },
+      { location: 'sugarSource' },
       onCycleFail),
     new TakeSugarAction(task, game,
       () => setCarrying('sugar'),
       onCycleFail),
     new GoToAction('GoToTray', () => task.tray,
-      { hasSugar: true, atTray: false },
-      { atTray: true, atSugarSource: false, atHive: false },
+      { hasSugar: true },
+      { location: 'tray' },
       onCycleFail),
     new DepositSugarAction(task,
       () => { setCarrying(null); task.clear(); },

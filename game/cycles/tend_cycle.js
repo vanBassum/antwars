@@ -15,7 +15,7 @@ class WaterFarmAction extends Action {
     this._onSuccess    = onSuccess;
     this._onFailure    = onFailure;
     this._duration     = WATER_DURATION;
-    this.preconditions = { atFarm: true, hasWater: true, farmAvailable: true };
+    this.preconditions = { location: 'farm', hasWater: true, farmAvailable: true };
     this.effects       = { hasWater: false, tended: true };
   }
   enter(_agent) { this._t = 0; }
@@ -25,7 +25,7 @@ class WaterFarmAction extends Action {
       if (!this._task.water()) {
         this._task.clear();
         this._onFailure?.();
-        agent.worldState.atFarm = false;
+        agent.worldState.location = null;
         agent.invalidate();
         return false;
       }
@@ -37,17 +37,17 @@ class WaterFarmAction extends Action {
 }
 
 // Build the tend cycle: TakeWater (free, at hive) → GoToFarmForWater → Water.
-// (GoToHive is the shared travel action; tend's TakeWater pre {atHive: true}
+// (GoToHive is the shared travel action; tend's TakeWater pre {location:'hive'}
 // will pull GoToHive into the plan automatically when needed.)
 export function buildTendActions({ task, setCarrying, onCycleFail }) {
   return [
     new WaitAction('TakeWater', 0.2,
-      { atHive: true, hasWater: false },
+      { location: 'hive', hasWater: false },
       { hasWater: true },
       () => setCarrying('water')),
     new GoToAction('GoToFarmForWater', () => task.target,
-      { atFarm: false, hasWater: true, farmAvailable: true },
-      { atFarm: true, atResource: false, atHive: false },
+      { hasWater: true, farmAvailable: true },
+      { location: 'farm' },
       onCycleFail),
     new WaterFarmAction(task,
       () => { setCarrying(null); task.clear(); },

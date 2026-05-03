@@ -15,7 +15,7 @@ class DropSeedAction extends Action {
     this._onSuccess    = onSuccess;
     this._onFailure    = onFailure;
     this._duration     = DROP_DURATION;
-    this.preconditions = { atFarm: true, hasSeed: true, seedAvailable: true };
+    this.preconditions = { location: 'farm', hasSeed: true, seedAvailable: true };
     this.effects       = { hasSeed: false, seeded: true };
   }
   enter(_agent) { this._t = 0; }
@@ -25,7 +25,7 @@ class DropSeedAction extends Action {
       if (!this._task.deliver()) {
         this._task.clear();
         this._onFailure?.();
-        agent.worldState.atFarm = false;
+        agent.worldState.location = null;
         agent.invalidate();
         return false;
       }
@@ -41,12 +41,12 @@ class DropSeedAction extends Action {
 export function buildSeedActions({ task, setCarrying, onCycleFail }) {
   return [
     new WaitAction('TakeSeed', 0.2,
-      { atHive: true, hasSeed: false },
+      { location: 'hive', hasSeed: false },
       { hasSeed: true },
       () => setCarrying('seed')),
     new GoToAction('GoToFarmForSeed', () => task.target,
-      { atFarm: false, hasSeed: true, seedAvailable: true },
-      { atFarm: true, atResource: false, atHive: false },
+      { hasSeed: true, seedAvailable: true },
+      { location: 'farm' },
       onCycleFail),
     new DropSeedAction(task,
       () => { setCarrying(null); task.clear(); },

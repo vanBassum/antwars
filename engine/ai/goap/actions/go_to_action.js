@@ -70,7 +70,7 @@ export class GoToAction extends Action {
     const waypoints = smoothPath(grid, ant.position, path, edgeOverride);
     // Already at the goal hex — happens when wander or a previous trip left
     // the ant in the destination cell while worldState still says she's
-    // elsewhere. Succeed immediately so the effect (atHive/atFarm/etc.) gets
+    // elsewhere. Succeed immediately so the effect (location update) gets
     // applied and the planner moves on, instead of looping on a no-op trip.
     if (!waypoints || waypoints.length === 0) {
       mover.arrived = true;
