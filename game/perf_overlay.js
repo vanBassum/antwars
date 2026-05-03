@@ -18,11 +18,13 @@ class StatsRing {
     this.buf  = new Float32Array(size);
     this.idx  = 0;
     this.count = 0;
+    this.lastInstanceCount = 0; // most recent x-count (instances ticking this comp)
   }
-  push(v) {
+  push(v, instanceCount = 0) {
     this.buf[this.idx % this.size] = v;
     this.idx++;
     if (this.count < this.size) this.count++;
+    this.lastInstanceCount = instanceCount;
   }
   avg() {
     if (this.count === 0) return 0;
@@ -134,28 +136,31 @@ export class PerfOverlay {
     // Per-component update costs, alphabetical for stable row order.
     // Columns: avg / max ms over the last STATS_WINDOW frames, then current
     // count. Smoothing over a window stops the rows from flickering when
-    // costs spike on individual frames.
+    // costs spike on individual frames. We render every component we've
+    // ever seen — entries that briefly stop ticking still display (with
+    // their max decaying toward 0 as zero samples push through the ring).
     const comps = timing.components;
-    if (comps && comps.length) {
+    if (comps) {
       const seen = new Set();
       for (const c of comps) {
         let stats = this._compStats.get(c.name);
         if (!stats) { stats = new StatsRing(STATS_WINDOW); this._compStats.set(c.name, stats); }
-        stats.push(c.ms);
+        stats.push(c.ms, c.count);
         seen.add(c.name);
       }
-      // Push a 0 sample for components that didn't tick this frame so their
-      // historical max decays once the work goes away.
       for (const [name, stats] of this._compStats) {
-        if (!seen.has(name)) stats.push(0);
+        if (!seen.has(name)) stats.push(0, 0);
       }
+    }
 
+    if (this._compStats.size > 0) {
       text += '\nUpdate breakdown (avg/max ms · count):';
-      for (const c of comps) {
-        const stats = this._compStats.get(c.name);
+      const names = [...this._compStats.keys()].sort((a, b) => a.localeCompare(b));
+      for (const name of names) {
+        const stats = this._compStats.get(name);
         const avg = stats.avg();
         const max = stats.max();
-        text += `\n  ${c.name.padEnd(16)} ${avg.toFixed(2).padStart(5)} / ${max.toFixed(2).padStart(5)}  x${c.count}`;
+        text += `\n  ${name.padEnd(16)} ${avg.toFixed(2).padStart(5)} / ${max.toFixed(2).padStart(5)}  x${stats.lastInstanceCount}`;
       }
     }
 
