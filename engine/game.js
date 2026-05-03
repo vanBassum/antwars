@@ -86,13 +86,12 @@ export class Game {
   }
 
   _tick(time) {
-    // Cap simulation+render at ~60fps so high-refresh-rate monitors don't burn
-    // CPU on extra ticks. The 1ms slack accounts for vsync jitter — without it
-    // a 144Hz display sometimes lands just under the threshold and we'd skip
-    // every other 60Hz tick.
+    // requestAnimationFrame (used by setAnimationLoop) is already vsync-locked
+    // to the display refresh rate, so no software cap is needed — running at
+    // 60/120/144Hz is fine. The earlier "3000 FPS" reading was a display bug
+    // (FPS calc was inverting work-time, not interval) — fixed by frameInterval
+    // below.
     const elapsedMs = time - this._lastTime;
-    if (elapsedMs < Game.TARGET_FRAME_MS - 1) return;
-
     const rawDt = Math.min(elapsedMs / 1000, 0.1);
     this._lastTime = time;
     const dt = rawDt * this.timeScale;
@@ -122,4 +121,3 @@ export class Game {
   }
 }
 
-Game.TARGET_FRAME_MS = 1000 / 60;
