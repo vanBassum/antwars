@@ -294,13 +294,17 @@ export class Worker extends Component {
   }
 
   // Called by WorkManager when a player-driven task is queued. If this
-  // worker isn't carrying a gathered resource, abandon the current ambient
-  // cycle and re-request so the boosted egg task can win.
+  // worker isn't carrying anything finite, abandon the current ambient
+  // cycle and re-request so the priority task can win.
   preempt() {
     const agent = this.gameObject.getComponent(GOAPAgent);
     if (!agent) return;
-    // Don't interrupt if carrying a gathered resource — let it deposit first.
-    if (agent.worldState.hasResource) return;
+    // Don't drop carries that came from a finite source — abandoning
+    // would lose the unit (gathered resources, sugar pulled from stockpile
+    // for restock, wood pulled from stockpile for construction). Let the
+    // current trip finish; the worker will re-evaluate at the cycle boundary.
+    const ws = agent.worldState;
+    if (ws.hasResource || ws.hasSugar || ws.hasMaterial) return;
     // Don't interrupt if already on an egg delivery.
     if (this._egg.hasTarget()) return;
     this._abandonCycle();
