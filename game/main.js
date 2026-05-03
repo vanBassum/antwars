@@ -42,6 +42,25 @@ document.body.append(debugBtn);
 game.debug.onChange(on => debugBtn.classList.toggle('active', on));
 window.addEventListener('keydown', (e) => {
   if (e.code === 'F3') { e.preventDefault(); game.debug.toggle(); }
+  // F4: toggle the entire shadow pass. Big A/B for pinning whether render
+  // time is dominated by shadow rendering. Triggers shader recompile so
+  // the first toggle costs ~50ms; steady-state delta is the real signal.
+  if (e.code === 'F4') {
+    e.preventDefault();
+    game.renderer.shadowMap.enabled = !game.renderer.shadowMap.enabled;
+    game.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
+    console.log('shadows:', game.renderer.shadowMap.enabled ? 'ON' : 'OFF');
+  }
+  // F5: toggle ant-instance shadow casting only. The 600-instance ant pool
+  // is the largest single contributor to the shadow pass.
+  if (e.code === 'F5') {
+    e.preventDefault();
+    if (game.antInstances) {
+      game.antInstances.object3D.traverse(o => { if (o.isInstancedMesh) o.castShadow = !o.castShadow; });
+      const on = game.antInstances.object3D.children[0]?.castShadow;
+      console.log('ant shadows:', on ? 'ON' : 'OFF');
+    }
+  }
 });
 
 new SpeedControls(game);

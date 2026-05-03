@@ -147,6 +147,27 @@ export class PerfOverlay {
     const load = Math.min(100, (frameAvg / TARGET_MS) * 100);
     const idle = Math.max(0, 100 - load);
 
+    // Scene composition counters — useful for interpreting render time.
+    // Walked once per second instead of per frame; the scene graph
+    // doesn't change often enough to need real-time accuracy.
+    if (!this._lastSceneCount || now - this._lastSceneCount > 500) {
+      let shadowCasters = 0, transparents = 0, visibleMeshes = 0, instancedCount = 0;
+      game.scene.traverse(o => {
+        if (!o.visible) return;
+        if (o.isMesh || o.isInstancedMesh) {
+          visibleMeshes++;
+          if (o.castShadow) shadowCasters++;
+          const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+          for (const m of mats) if (m.transparent) { transparents++; break; }
+          if (o.isInstancedMesh) instancedCount += o.count;
+        }
+      });
+      this._sceneCounts = { shadowCasters, transparents, visibleMeshes, instancedCount };
+      this._lastSceneCount = now;
+    }
+    const sc = this._sceneCounts ?? { shadowCasters: 0, transparents: 0, visibleMeshes: 0, instancedCount: 0 };
+    const shadowsOn = game.renderer.shadowMap.enabled;
+
     let text =
       `FPS: ${this._fps}  frame avg/max: ${frameAvg.toFixed(1)} / ${frameMax.toFixed(1)} ms\n` +
       `  load: ${load.toFixed(0)}%  idle: ${idle.toFixed(0)}%\n` +
@@ -155,7 +176,10 @@ export class PerfOverlay {
       `render: ${renderAvg.toFixed(1)} / ${renderMax.toFixed(1)}\n` +
       `Entities: ${total}  ants: ${ants}  farms: ${farms}  resources: ${resources}\n` +
       `Draw calls: ${info.render.calls}  tris: ${info.render.triangles}  ` +
-      `geom: ${info.memory.geometries}  tex: ${info.memory.textures}`;
+      `geom: ${info.memory.geometries}  tex: ${info.memory.textures}\n` +
+      `Scene: meshes ${sc.visibleMeshes}  shadow-casters ${sc.shadowCasters}  ` +
+      `transparent ${sc.transparents}  instances ${sc.instancedCount}\n` +
+      `Shadows: ${shadowsOn ? 'ON ' : 'OFF'} (F4 toggle, F5 ant-shadows toggle)`;
 
     // Per-component update costs, alphabetical for stable row order.
     // Columns: avg / max ms over the last STATS_WINDOW frames, then current
