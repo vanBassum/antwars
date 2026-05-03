@@ -3,6 +3,15 @@ import { Planner } from './planner.js';
 
 const planner = new Planner();
 
+// Lazily allocate / accumulate into a Component._profile bucket. Used for
+// the GOAP·plan / GOAP·perform sub-bucket measurements.
+function bumpBucket(profile, name, ms) {
+  let entry = profile.get(name);
+  if (!entry) profile.set(name, entry = { ms: 0, count: 0 });
+  entry.ms += ms;
+  entry.count += 1;
+}
+
 export class GOAPAgent extends Component {
   constructor() {
     super();
@@ -31,6 +40,15 @@ export class GOAPAgent extends Component {
   }
 
   _tick(dt) {
+    // Sub-bucket profiling: split GOAPAgent's per-tick cost into its big
+    // pieces — `GOAP·plan` (planner.plan calls), `GOAP·plan-fail` (subset
+    // that returned no plan), and `GOAP·perform` (per-frame action.perform
+    // calls) — so we can tell whether the bottleneck is replanning churn or
+    // per-frame action execution. These show up alphabetically in PerfOverlay
+    // alongside GOAPAgent (which remains the total). Gated on profileEnabled
+    // because the extra performance.now() pairs aren't free at 600 agents.
+    const profile = Component.profileEnabled ? Component._profile : null;
+
     if (this._retryTimer > 0) {
       this._retryTimer -= dt;
       return;
@@ -43,7 +61,14 @@ export class GOAPAgent extends Component {
     // chain), and `invalidate()` clears _plan on real-world failures.
     if (!this._currentAction) {
       if (this._plan.length === 0) {
-        this._plan = planner.plan(this.actions, this.worldState, this.goal) ?? [];
+        if (profile) {
+          const t0 = performance.now();
+          this._plan = planner.plan(this.actions, this.worldState, this.goal) ?? [];
+          bumpBucket(profile, 'GOAP·plan', performance.now() - t0);
+          if (this._plan.length === 0) bumpBucket(profile, 'GOAP·plan-fail', 0);
+        } else {
+          this._plan = planner.plan(this.actions, this.worldState, this.goal) ?? [];
+        }
       }
 
       if (this._plan.length === 0) {
@@ -67,7 +92,14 @@ export class GOAPAgent extends Component {
     }
 
     // Execute current action
-    const done = this._currentAction.perform(this, dt);
+    let done;
+    if (profile) {
+      const t0 = performance.now();
+      done = this._currentAction.perform(this, dt);
+      bumpBucket(profile, 'GOAP·perform', performance.now() - t0);
+    } else {
+      done = this._currentAction.perform(this, dt);
+    }
     if (done) {
       this.worldState = this._currentAction.applyEffects(this.worldState);
       this._currentAction.exit(this);
