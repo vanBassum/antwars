@@ -52,6 +52,11 @@ export class PerfOverlay {
     this._lastFpsUpdate = 0;
     // Per-component-name rolling stats for the breakdown rows.
     this._compStats = new Map();
+    // Top-line rolling stats — instantaneous values jitter too much to read.
+    this._frameStats  = new StatsRing(STATS_WINDOW);
+    this._updateStats = new StatsRing(STATS_WINDOW);
+    this._logicStats  = new StatsRing(STATS_WINDOW);
+    this._renderStats = new StatsRing(STATS_WINDOW);
 
     // Component-level profiling is gated to when the overlay is visible —
     // the per-update performance.now() pair has measurable cost on hot loops
@@ -119,16 +124,35 @@ export class PerfOverlay {
     // Three.js renderer info
     const info = game.renderer.info;
 
-    // Main-thread load: how much of the 60fps budget the game loop ate this
-    // frame. The remainder is idle headroom inside _tick — note this excludes
-    // browser compositor / GC time between rAF callbacks.
-    const load = Math.min(100, (timing.total / TARGET_MS) * 100);
+    // Push current samples and read smoothed values for display. Single-frame
+    // numbers spike too much to read (e.g. a frame with one extra plan() call
+    // doubles GOAPAgent ms).
+    this._frameStats.push(timing.total);
+    this._updateStats.push(timing.update);
+    this._logicStats.push(timing.logic);
+    this._renderStats.push(timing.render);
+
+    const frameAvg  = this._frameStats.avg();
+    const frameMax  = this._frameStats.max();
+    const updateAvg = this._updateStats.avg();
+    const updateMax = this._updateStats.max();
+    const logicAvg  = this._logicStats.avg();
+    const logicMax  = this._logicStats.max();
+    const renderAvg = this._renderStats.avg();
+    const renderMax = this._renderStats.max();
+
+    // Main-thread load: how much of the 60fps budget the game loop ate, on
+    // average. The remainder is idle headroom inside _tick — note this
+    // excludes browser compositor / GC time between rAF callbacks.
+    const load = Math.min(100, (frameAvg / TARGET_MS) * 100);
     const idle = Math.max(0, 100 - load);
 
     let text =
-      `FPS: ${this._fps}  frame: ${timing.total.toFixed(1)} ms\n` +
+      `FPS: ${this._fps}  frame avg/max: ${frameAvg.toFixed(1)} / ${frameMax.toFixed(1)} ms\n` +
       `  load: ${load.toFixed(0)}%  idle: ${idle.toFixed(0)}%\n` +
-      `  update: ${timing.update.toFixed(1)}  logic: ${timing.logic.toFixed(1)}  render: ${timing.render.toFixed(1)}\n` +
+      `  update: ${updateAvg.toFixed(1)} / ${updateMax.toFixed(1)}  ` +
+      `logic: ${logicAvg.toFixed(1)} / ${logicMax.toFixed(1)}  ` +
+      `render: ${renderAvg.toFixed(1)} / ${renderMax.toFixed(1)}\n` +
       `Entities: ${total}  ants: ${ants}  farms: ${farms}  resources: ${resources}\n` +
       `Draw calls: ${info.render.calls}  tris: ${info.render.triangles}  ` +
       `geom: ${info.memory.geometries}  tex: ${info.memory.textures}`;
