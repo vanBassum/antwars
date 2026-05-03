@@ -68,8 +68,8 @@ await Promise.all([
 ]);
 
 // Instanced pools for ants and queen — shared across all entities of each type.
-const antInstances   = new InstancedMeshGroup('assets/models/Ant.glb',   { capacity: 256, scale: 0.25 });
-const queenInstances = new InstancedMeshGroup('assets/models/Queen.glb', { capacity: 4,   scale: 0.4  });
+const antInstances   = new InstancedMeshGroup('assets/models/Ant.glb',   { capacity: 1024, scale: 0.25 });
+const queenInstances = new InstancedMeshGroup('assets/models/Queen.glb', { capacity: 4,    scale: 0.4  });
 game.scene.add(antInstances.object3D);
 game.scene.add(queenInstances.object3D);
 game.antInstances   = antInstances;

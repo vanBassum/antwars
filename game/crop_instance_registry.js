@@ -21,7 +21,8 @@ export class CropInstanceRegistry {
 
   ensure(url) {
     if (this._groups.has(url)) return;
-    const group = new InstancedMeshGroup(url, { capacity: 64 });
+    // 5 crop instances per farm; sized for the stress scene (50 farms × 5 = 250).
+    const group = new InstancedMeshGroup(url, { capacity: 512 });
     this._scene.add(group.object3D);
     this._groups.set(url, group);
   }

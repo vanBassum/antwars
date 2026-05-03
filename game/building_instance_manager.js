@@ -12,7 +12,8 @@ export class BuildingInstanceManager {
   register(modelUrl, matrix) {
     let group = this._groups.get(modelUrl);
     if (!group) {
-      group = new InstancedMeshGroup(modelUrl, { capacity: 64 });
+      // Sized for the stress scene's biggest single-type count (50 farm plots).
+      group = new InstancedMeshGroup(modelUrl, { capacity: 256 });
       this._groups.set(modelUrl, group);
       this._scene.add(group.object3D);
     }
