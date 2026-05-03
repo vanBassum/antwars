@@ -1,27 +1,51 @@
+import * as THREE from 'three';
 import { Component } from '../../engine/gameobject.js';
-import { applyGhost, restoreFromGhost } from '../../engine/ghost_material.js';
+
+const _mat4 = new THREE.Matrix4();
 
 // A building under construction. Tracks per-resource remaining cost and
-// applies a translucent ghost overlay to the building's meshes until the
-// last unit lands. On completion it restores opaque materials and calls
-// onComplete (which adds the gameplay component for this building).
+// renders itself as a translucent ghost via the GhostInstanceManager
+// (one instanced draw per model URL across all sites) until the last unit
+// lands. On completion it unregisters from the ghost pool and calls
+// onComplete (which adds the gameplay component for this building, and for
+// non-instanced buildings re-attaches a clone of the model).
 //
 // Designed for multi-resource costs (e.g. { wood: 5, sugar: 3 }) even
 // though v1 only ships wood.
 export class ConstructionSite extends Component {
-  constructor({ remaining, def, onComplete }) {
+  constructor({ remaining, def, modelUrl, onComplete }) {
     super();
     this.remaining = { ...remaining }; // { wood: 5 }
     this.delivered = {};
     for (const k of Object.keys(this.remaining)) this.delivered[k] = 0;
     this._def        = def;
+    this._modelUrl   = modelUrl ?? def?.modelUrl ?? null;
     this._onComplete = onComplete;
     this._completed  = false;
-    this._ghostHandle = null;
+    this._ghostReg   = null;
   }
 
   start() {
-    this._ghostHandle = applyGhost(this.gameObject.object3D);
+    // PlacementController hover-preview gameObjects also run start() but
+    // aren't real construction sites — leave them alone (their mesh is
+    // needed for applyGhost; no ghost-pool registration wanted).
+    if (this.gameObject._previewOnly) return;
+
+    // Strip any meshes inherited from the placement-preview path (placement
+    // adds a cloneModel for the hover ghost; we render via the instanced
+    // ghost pool from here on, so the per-site mesh is redundant).
+    const meshes = [];
+    this.gameObject.object3D.traverse(obj => { if (obj.isMesh) meshes.push(obj); });
+    for (const m of meshes) m.parent?.remove(m);
+
+    // Register with the shared ghost-instance pool — one instanced draw call
+    // per model URL across every concurrent construction site.
+    const mgr = this.gameObject.game?.ghostInstances;
+    if (mgr && this._modelUrl) {
+      this._syncMatrix();
+      this._ghostReg = mgr.register(this._modelUrl, _mat4);
+    }
+
     // Wake any worker mid-cycle so they re-evaluate immediately instead of
     // waiting for cycle boundary. The WorkManager rebuilds its caches each
     // request() now, so the new site is visible right away.
@@ -60,9 +84,19 @@ export class ConstructionSite extends Component {
 
   _complete() {
     this._completed = true;
-    restoreFromGhost(this._ghostHandle);
-    this._ghostHandle = null;
+    const mgr = this.gameObject.game?.ghostInstances;
+    if (mgr) mgr.unregister(this._ghostReg);
+    this._ghostReg = null;
     this._onComplete?.(this.gameObject);
+  }
+
+  destroy() {
+    // Clean up if the site is removed before completion (e.g. cancel).
+    if (this._ghostReg) {
+      const mgr = this.gameObject.game?.ghostInstances;
+      if (mgr) mgr.unregister(this._ghostReg);
+      this._ghostReg = null;
+    }
   }
 
   getContextMenu() {
@@ -76,5 +110,11 @@ export class ConstructionSite extends Component {
       title:    `${this._def.name} (building)`,
       progress,
     };
+  }
+
+  _syncMatrix() {
+    const o = this.gameObject.object3D;
+    o.updateMatrixWorld(true);
+    _mat4.copy(o.matrixWorld);
   }
 }

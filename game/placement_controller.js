@@ -44,6 +44,10 @@ export class PlacementController {
   _buildGhost(def) {
     const go = def.createObject(this._game);
     go.game = this._game;
+    // Flag so ConstructionSite.start() doesn't strip the mesh / register a
+    // ghost-instance for this preview-only gameObject (it isn't in
+    // game.gameObjects; it's a hover preview).
+    go._previewOnly = true;
     go.start();
     this._ghostHandle = applyGhost(go.object3D);
     go.object3D.visible = false;

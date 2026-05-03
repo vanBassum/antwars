@@ -2,8 +2,9 @@ import { MeshBasicMaterial } from 'three';
 
 // Shared translucent material used for construction-site ghosts and placement
 // previews. One instance is reused across all ghost overlays — no per-mesh
-// material cloning needed.
-const ghostMat = new MeshBasicMaterial({
+// material cloning needed. Exported so the construction-site ghost-instance
+// pool can pass it as InstancedMeshGroup's materialOverride.
+export const ghostMat = new MeshBasicMaterial({
   transparent: true,
   opacity: 0.45,
   depthWrite: false,

@@ -22,7 +22,7 @@ const _tmpMatrix = new THREE.Matrix4();
 const _tmpColor  = new THREE.Color();
 
 export class InstancedMeshGroup {
-  constructor(modelUrl, { capacity = 256, scale = 1 } = {}) {
+  constructor(modelUrl, { capacity = 256, scale = 1, materialOverride = null } = {}) {
     this.url      = modelUrl;
     this.capacity = capacity;
     this._slotInUse = new Uint8Array(capacity);
@@ -42,7 +42,11 @@ export class InstancedMeshGroup {
     this._meshes = []; // [{ inst, baseMatrix }]
     source.traverse(node => {
       if (!node.isMesh) return;
-      const inst = new THREE.InstancedMesh(node.geometry, node.material, capacity);
+      // materialOverride lets construction-site ghost pools share one
+      // translucent material across all sub-meshes instead of using each
+      // GLB's PBR materials.
+      const mat = materialOverride ?? node.material;
+      const inst = new THREE.InstancedMesh(node.geometry, mat, capacity);
       inst.castShadow    = true;
       inst.receiveShadow = true;
       inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

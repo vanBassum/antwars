@@ -20,6 +20,7 @@ import { DebugOverlay } from './debug_overlay.js';
 import { PerfOverlay } from './perf_overlay.js';
 import { SpeedControls } from './speed_controls.js';
 import { BuildingInstanceManager } from './building_instance_manager.js';
+import { GhostInstanceManager } from './ghost_instance_manager.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -97,6 +98,9 @@ game.workManager = new WorkManager(game);
 // Batches draw calls for multi-instance building types (farm plots, feeding
 // trays, bushes, sugar nodes) via InstancedMesh.
 game.buildingInstances = new BuildingInstanceManager(game.scene);
+// Same idea but for in-flight construction-site ghost overlays — keeps the
+// 50-farm stress scene from spending ~100 transparent draw calls.
+game.ghostInstances    = new GhostInstanceManager(game.scene);
 
 // World file is normally `flat.json`; `?world=<name>` lets perf benchmarks
 // load alternate scenes (e.g. `?world=stress.flat.json`) without rebuilding.

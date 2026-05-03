@@ -23,6 +23,7 @@ function attachConstruction(go, def, addGameplay) {
   go.addComponent(new ConstructionSite({
     remaining: def.constructionCost,
     def,
+    modelUrl: def.modelUrl,
     onComplete: () => {
       const c = addGameplay(go);
       // Components added late don't get start() automatically — game.add only
@@ -79,11 +80,12 @@ export const ENTITY_DEFS = [
     constructionCost: { wood: 5 },
     createObject() {
       const go = new GameObject('Farm Plot');
-      const tempMesh = cloneModel(this.modelUrl);
-      go.object3D.add(tempMesh);
+      // Mesh is only here so PlacementController.applyGhost has something to
+      // ghost during the hover preview. ConstructionSite.start strips it once
+      // committed and switches to the shared GhostInstanceManager pool.
+      go.object3D.add(cloneModel(this.modelUrl));
       const modelUrl = this.modelUrl;
       attachConstruction(go, this, (g) => {
-        g.object3D.remove(tempMesh);
         const ib = g.addComponent(new InstancedBuilding(modelUrl));
         ib.start();
         const fp = g.addComponent(new FarmPlot());
@@ -135,8 +137,15 @@ export const ENTITY_DEFS = [
     constructionCost: { wood: 10 },
     createObject() {
       const go = new GameObject('Training Hut');
+      // Initial mesh is for the placement-preview ghost; ConstructionSite.start
+      // strips it. Training huts aren't instanced post-construction (one-of-a-kind
+      // building), so we re-attach a clone in onComplete.
       go.object3D.add(cloneModel(this.modelUrl));
-      attachConstruction(go, this, (g) => g.addComponent(new TrainingHut()));
+      const modelUrl = this.modelUrl;
+      attachConstruction(go, this, (g) => {
+        g.object3D.add(cloneModel(modelUrl));
+        return g.addComponent(new TrainingHut());
+      });
       go.addComponent(new Building(this));
       return go;
     },
@@ -147,11 +156,11 @@ export const ENTITY_DEFS = [
     constructionCost: { wood: 5 },
     createObject() {
       const go = new GameObject('Feeding Tray');
-      const tempMesh = cloneModel(this.modelUrl);
-      go.object3D.add(tempMesh);
+      // Mesh is for the placement-preview ghost only; ConstructionSite.start
+      // strips it. Post-construction is instanced via BuildingInstanceManager.
+      go.object3D.add(cloneModel(this.modelUrl));
       const modelUrl = this.modelUrl;
       attachConstruction(go, this, (g) => {
-        g.object3D.remove(tempMesh);
         const ib = g.addComponent(new InstancedBuilding(modelUrl));
         ib.start();
         const ft = g.addComponent(new FeedingTray());
