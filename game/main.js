@@ -16,6 +16,7 @@ import { WorkManager } from './work_manager.js';
 import { DebugMode } from './debug.js';
 import { DebugOverlay } from './debug_overlay.js';
 import { PerfOverlay } from './perf_overlay.js';
+import { SpeedControls } from './speed_controls.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -38,6 +39,8 @@ game.debug.onChange(on => debugBtn.classList.toggle('active', on));
 window.addEventListener('keydown', (e) => {
   if (e.code === 'F3') { e.preventDefault(); game.debug.toggle(); }
 });
+
+new SpeedControls(game);
 
 const camera = new GameObject('Camera');
 camera.addComponent(new CameraRig());

@@ -6,6 +6,7 @@ export class Game {
     this.gameObjects     = [];
     this._lastTime       = 0;
     this.elapsed         = 0;  // cumulative game time in seconds
+    this.timeScale       = 1;  // 0 = paused, 1 = normal, 2 = 2x, etc.
     this.camera          = null;
     this._container      = container;
     this._sceneListeners = new Set();
@@ -84,8 +85,9 @@ export class Game {
   }
 
   _tick(time) {
-    const dt = Math.min((time - this._lastTime) / 1000, 0.1);
+    const rawDt = Math.min((time - this._lastTime) / 1000, 0.1);
     this._lastTime = time;
+    const dt = rawDt * this.timeScale;
     this.elapsed += dt;
 
     const t0 = performance.now();
