@@ -49,14 +49,16 @@ export class WorkManager {
     this._game     = game;
     this._claims   = new Map(); // ant gameObject → claim
 
-    // Index caches — rebuilt only on add/remove, not every frame.
-    this._dirty         = true;
-    this._resourceNodes = []; // gameObjects with a ResourceNode component
-    this._farmPlots     = []; // gameObjects with a FarmPlot component
-    this._looseEggs     = []; // gameObjects with an EggPickup component
-    this._trainingHuts  = []; // gameObjects with a TrainingHut component
-    this._feedingTrays  = []; // gameObjects with a FeedingTray component
-    this._constructionSites = []; // gameObjects with a ConstructionSite component (in-progress only)
+    // Index caches — rebuilt fresh on every public call. Cheap at colony
+    // sizes (<100 entities) and avoids the whole class of "I forgot to
+    // mark the cache dirty when X happened" bugs (which bit us when
+    // ConstructionSite added gameplay components mid-frame).
+    this._resourceNodes     = [];
+    this._farmPlots         = [];
+    this._looseEggs         = [];
+    this._trainingHuts      = [];
+    this._feedingTrays      = [];
+    this._constructionSites = [];
 
     // Registered workers — workers add/remove themselves so we can preempt
     // them without importing the Worker class (avoids circular deps).
@@ -65,8 +67,6 @@ export class WorkManager {
     // Fairness: track when each (target, kind) first became eligible.
     // Key format: gameObject instance → Map<kind, timestampSeconds>.
     this._eligibleSince = new Map();
-
-    game.addSceneListener(() => { this._dirty = true; });
   }
 
   request(ant) {
@@ -325,11 +325,6 @@ export class WorkManager {
   registerWorker(worker)   { this._workers.add(worker); }
   unregisterWorker(worker) { this._workers.delete(worker); }
 
-  // Force a cache refresh on the next request — used when a component is
-  // added late (e.g. ConstructionSite completing and adding FarmPlot), since
-  // addComponent doesn't trigger the scene-listener that watches add/remove.
-  markDirty() { this._dirty = true; }
-
   // Signal all workers to re-evaluate. Called when a player-driven task is
   // queued (e.g. training request) so workers don't have to finish their
   // current ambient cycle before noticing the new high-priority work.
@@ -338,7 +333,6 @@ export class WorkManager {
   }
 
   _refreshCaches() {
-    if (!this._dirty) return;
     this._resourceNodes = [];
     this._farmPlots     = [];
     this._looseEggs     = [];
@@ -353,7 +347,6 @@ export class WorkManager {
       if (go.getComponent(FeedingTray))      this._feedingTrays.push(go);
       if (go.getComponent(ConstructionSite)) this._constructionSites.push(go);
     }
-    this._dirty = false;
   }
 
   // Weighted score: distance² discounted by how long the task has been waiting.

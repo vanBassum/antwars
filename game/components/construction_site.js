@@ -28,14 +28,10 @@ export class ConstructionSite extends Component {
       obj.material.depthWrite  = false;
       this._ghostMats.push(obj.material);
     });
-    // Order matters: mark the WorkManager cache dirty BEFORE preempting so the
-    // workers' re-pick sees this new site in _constructionSites. game.add only
-    // fires the scene-change notification AFTER start() returns, which would
-    // otherwise leave the cache stale during the preempt and the workers would
-    // re-claim ambient sugar runs instead of switching to construction.
-    const wm = this.gameObject.game?.workManager;
-    wm?.markDirty?.();
-    wm?.preemptWorkers?.();
+    // Wake any worker mid-cycle so they re-evaluate immediately instead of
+    // waiting for cycle boundary. The WorkManager rebuilds its caches each
+    // request() now, so the new site is visible right away.
+    this.gameObject.game?.workManager?.preemptWorkers?.();
   }
 
   needsMaterial(type) {
@@ -77,10 +73,6 @@ export class ConstructionSite extends Component {
     }
     this._ghostMats.length = 0;
     this._onComplete?.(this.gameObject);
-    // The newly-added gameplay component (FarmPlot etc.) needs to be picked
-    // up by WorkManager's by-component caches, which only auto-rebuild on
-    // gameObject add/remove. Force a refresh so it shows up immediately.
-    this.gameObject.game?.workManager?.markDirty?.();
   }
 
   getContextMenu() {
