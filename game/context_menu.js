@@ -80,12 +80,11 @@ export class ContextMenu {
 
     const meshes = [];
     for (const go of this._game.gameObjects) {
-      const provider = go.components.find(c => typeof c.getContextMenu === 'function');
-      if (!provider) continue;
+      const hasMenu = go.components.some(c => typeof c.getContextMenu === 'function');
+      if (!hasMenu) continue;
       go.object3D.traverse(o => {
         if (o.isMesh) {
-          o.userData._ctxGO       = go;
-          o.userData._ctxProvider = provider;
+          o.userData._ctxGO = go;
           meshes.push(o);
         }
       });
@@ -97,7 +96,7 @@ export class ContextMenu {
     let obj = hit.object;
     while (obj && !obj.userData?._ctxGO) obj = obj.parent;
     if (!obj) return null;
-    return { go: obj.userData._ctxGO, provider: obj.userData._ctxProvider };
+    return { go: obj.userData._ctxGO };
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -132,7 +131,7 @@ export class ContextMenu {
     if (!this._target || !this._menu) return;
     // If the gameObject got removed (e.g. depleted resource), close.
     if (!this._game.gameObjects.includes(this._target.go)) { this._close(); return; }
-    const data = this._target.provider.getContextMenu();
+    const data = this._collectMenuData(this._target.go);
     if (!data) { this._close(); return; }
 
     // Only do a full DOM rebuild when the menu structure changes (rows
@@ -230,9 +229,34 @@ export class ContextMenu {
     this._menu.style.top  = `${my}px`;
   }
 
+  // Merge getContextMenu() descriptors from all components on the gameObject.
+  // First non-null title/state/picker wins; progress and actions are concatenated.
+  _collectMenuData(go) {
+    const providers = go.components.filter(c => typeof c.getContextMenu === 'function');
+    const merged = {};
+    const allProgress = [];
+    const allActions  = [];
+    for (const p of providers) {
+      const d = p.getContextMenu();
+      if (!d) continue;
+      if (d.title  && !merged.title)  merged.title  = d.title;
+      if (d.state  && !merged.state)  merged.state  = d.state;
+      if (d.picker && !merged.picker) merged.picker = d.picker;
+      if (d.progress) {
+        const items = Array.isArray(d.progress) ? d.progress : [d.progress];
+        allProgress.push(...items);
+      }
+      if (d.actions) allActions.push(...d.actions);
+    }
+    if (!merged.title) return null;
+    if (allProgress.length) merged.progress = allProgress;
+    if (allActions.length)  merged.actions  = allActions;
+    return merged;
+  }
+
   _render() {
     if (!this._target || !this._menu) return;
-    const data = this._target.provider.getContextMenu();
+    const data = this._collectMenuData(this._target.go);
     if (!data) { this._close(); return; }
     this._renderData(data);
   }

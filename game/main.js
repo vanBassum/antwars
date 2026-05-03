@@ -80,6 +80,7 @@ const data = await res.json();
 new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
 
 const placement = new PlacementController(game);
+game.placement   = placement;
 new ContextMenu(game, { isBlocked: () => placement.active });
 
 // Per-frame debug labels above any gameObject exposing getDebugInfo().

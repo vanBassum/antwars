@@ -107,6 +107,7 @@ export class PlacementController {
     if (this._def.entrance) grid.setEntrance(hex.q, hex.r, this._def.entrance[0], this._def.entrance[1]);
 
     this._onCommit?.();
+    this._onCancel = null; // successful placement — don't restore
     this._cancel();
   }
 

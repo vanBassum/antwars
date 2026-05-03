@@ -9,6 +9,7 @@ import { FarmPlot } from './components/farm_plot.js';
 import { Queen } from './components/queen.js';
 import { EggPickup } from './components/egg_pickup.js';
 import { TrainingHut } from './components/training_hut.js';
+import { Building } from './components/building.js';
 
 export const ENTITY_DEFS = [
   new EntityDef({
@@ -57,6 +58,7 @@ export const ENTITY_DEFS = [
       const go = new GameObject('Farm Plot');
       go.object3D.add(cloneModel(this.modelUrl));
       go.addComponent(new FarmPlot());
+      go.addComponent(new Building(this));
       return go;
     },
   }),
