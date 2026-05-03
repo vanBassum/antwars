@@ -167,7 +167,7 @@ export class Queen extends Component {
     const def  = ENTITY_DEFS.find(d => d.id === 'egg');
     if (!def) return;
 
-    const go = def.createObject();
+    const go = def.createObject(game);
     go.object3D.position.copy(this.gameObject.object3D.position);
     game.add(go);
   }

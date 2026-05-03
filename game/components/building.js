@@ -45,7 +45,7 @@ export class Building extends Component {
 
     // Enter placement mode. On cancel, restore at old position.
     placement.start(def, () => {/* move is free */}, () => {
-      const go = def.createObject();
+      const go = def.createObject(game);
       go.object3D.position.copy(oldPos);
       game.add(go);
       game.hexGrid.occupy(oldHex.q, oldHex.r);

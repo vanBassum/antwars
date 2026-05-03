@@ -42,7 +42,7 @@ export class PlacementController {
   cancel() { this._cancel(); }
 
   _buildGhost(def) {
-    const go = def.createObject();
+    const go = def.createObject(this._game);
     go.game = this._game;
     go.start();
     this._ghostHandle = applyGhost(go.object3D);
@@ -93,7 +93,7 @@ export class PlacementController {
     e.stopImmediatePropagation();
 
     const wp = grid.hexToWorld(hex.q, hex.r);
-    const go = this._def.createObject();
+    const go = this._def.createObject(this._game);
     go.object3D.position.set(wp.x, 0, wp.z);
     this._game.add(go);
     grid.occupy(hex.q, hex.r);

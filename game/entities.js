@@ -2,6 +2,7 @@ import { EntityDef } from '../engine/entity_def.js';
 import { GameObject } from '../engine/gameobject.js';
 import { loadModel, cloneModel } from '../engine/model_cache.js';
 import { Mover } from '../engine/components/mover.js';
+import { InstancedRenderer } from '../engine/components/instanced_renderer.js';
 import { GOAPAgent } from '../engine/ai/goap/goap_agent.js';
 import { ResourceNode } from './components/resource_node.js';
 import { Worker } from './components/worker.js';
@@ -95,27 +96,23 @@ export const ENTITY_DEFS = [
   new EntityDef({
     id: 'ant', name: 'Ant', icon: '🐜', iconUrl: 'assets/icons/Ant.png', yOffset: 0,
     modelUrl: 'assets/models/Ant.glb',
-    createObject() {
+    createObject(game) {
       const go = new GameObject('Ant');
-      const model = cloneModel(this.modelUrl);
-      model.scale.setScalar(0.25);
-      go.object3D.add(model);
       go.addComponent(new Mover(1.5));
       go.addComponent(new GOAPAgent());
       go.addComponent(new Worker());
+      if (game?.antInstances) go.addComponent(new InstancedRenderer(game.antInstances));
       return go;
     },
   }),
   new EntityDef({
     id: 'queen', name: 'Queen', icon: '👑', iconUrl: 'assets/icons/Queen.png',
     modelUrl: 'assets/models/Queen.glb',
-    createObject() {
+    createObject(game) {
       const go = new GameObject('Queen');
-      const model = cloneModel(this.modelUrl);
-      model.scale.setScalar(0.4);
-      go.object3D.add(model);
       go.addComponent(new Mover(1.0));
       go.addComponent(new Queen());
+      if (game?.queenInstances) go.addComponent(new InstancedRenderer(game.queenInstances));
       return go;
     },
   }),
