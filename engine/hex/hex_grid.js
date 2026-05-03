@@ -15,6 +15,13 @@ export class HexGrid {
     this._occupied  = new Set();    // "q,r" keys
     this._entrances = new Map();    // "q,r" → [dq, dr] — only this neighbor can traverse the hex
     this._occupancyListeners = new Set();
+    // Cached A* results, keyed "sq,sr,gq,gr". Cleared on any occupancy
+    // change — the user-facing assumption is "the cached route is valid
+    // until something on the map blocks it." For a static map (e.g. the
+    // stress scene) this stays full and findPath becomes ~free; in normal
+    // play it gets bulk-invalidated when buildings come/go (rare).
+    this._pathCache = new Map();
+    this._pathCacheCap = 2000;
   }
 
   // Subscribe to occupancy changes (placement / destruction).
@@ -25,6 +32,9 @@ export class HexGrid {
   }
 
   _notifyOccupancy(q, r) {
+    // Any walkability change invalidates every cached path — full-flush is
+    // simpler and correct than maintaining per-hex reverse indexes.
+    if (this._pathCache.size > 0) this._pathCache.clear();
     for (const fn of this._occupancyListeners) fn(q, r);
   }
 
@@ -146,6 +156,24 @@ export class HexGrid {
       if (escape) { sq = escape.q; sr = escape.r; }
     }
 
+    // Cache lookup. Path is stored as a flat string of "q,r;q,r;…" so we
+    // can store negative-result hits (null) explicitly without confusion.
+    // Returning a fresh array each call — callers read paths but the
+    // array reference shouldn't be shared across consumers.
+    const cacheKey = sq + ',' + sr + '|' + gq + ',' + gr;
+    const cached = this._pathCache.get(cacheKey);
+    if (cached !== undefined) return cached === null ? null : cached.map(p => ({ q: p.q, r: p.r }));
+
+    const path = this._findPathUncached(sq, sr, gq, gr);
+
+    // Bounded cache. If we hit the cap, flush — paths are cheap to recompute
+    // and the next round of churn will re-warm the cache anyway.
+    if (this._pathCache.size >= this._pathCacheCap) this._pathCache.clear();
+    this._pathCache.set(cacheKey, path);
+    return path === null ? null : path.map(p => ({ q: p.q, r: p.r }));
+  }
+
+  _findPathUncached(sq, sr, gq, gr) {
     const open   = new Map();   // key → node
     const closed = new Set();
     const startK = this._key(sq, sr);
