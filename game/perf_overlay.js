@@ -1,12 +1,14 @@
-// Toggleable performance HUD overlay.
-// Shows FPS, frame timings, entity counts, and Three.js renderer stats.
+// Performance HUD overlay. Visibility is driven by game.debug — same toggle
+// (the top-left 🐞 button or F3) that shows per-ant debug labels also shows
+// this panel, so there's one mental model for "debug stuff on/off".
 
 const HISTORY_SIZE = 120; // frames of history for the graph
+const TARGET_MS    = 1000 / 60; // 60fps budget — matches the green line on the graph
 
 export class PerfOverlay {
-  constructor(game, { toggleKey = 'Backquote' } = {}) {
-    this._game = game;
-    this._visible = false;
+  constructor(game, debug) {
+    this._game  = game;
+    this._debug = debug;
     this._history = new Float32Array(HISTORY_SIZE);
     this._histIdx = 0;
     this._fpsAccum = 0;
@@ -16,7 +18,7 @@ export class PerfOverlay {
 
     this._el = document.createElement('div');
     this._el.className = 'perf-overlay';
-    this._el.style.display = 'none';
+    this._el.style.display = debug?.enabled ? '' : 'none';
     document.body.appendChild(this._el);
 
     this._canvas = document.createElement('canvas');
@@ -32,18 +34,11 @@ export class PerfOverlay {
 
     this._injectStyles();
 
-    window.addEventListener('keydown', (e) => {
-      if (e.code === toggleKey) { e.preventDefault(); this.toggle(); }
-    });
-  }
-
-  toggle() {
-    this._visible = !this._visible;
-    this._el.style.display = this._visible ? '' : 'none';
+    debug?.onChange(on => { this._el.style.display = on ? '' : 'none'; });
   }
 
   tick() {
-    if (!this._visible) return;
+    if (!this._debug?.enabled) return;
 
     const game = this._game;
     const timing = game.frameTiming;
@@ -77,8 +72,15 @@ export class PerfOverlay {
     // Three.js renderer info
     const info = game.renderer.info;
 
+    // Main-thread load: how much of the 60fps budget the game loop ate this
+    // frame. The remainder is idle headroom inside _tick — note this excludes
+    // browser compositor / GC time between rAF callbacks.
+    const load = Math.min(100, (timing.total / TARGET_MS) * 100);
+    const idle = Math.max(0, 100 - load);
+
     this._stats.textContent =
       `FPS: ${this._fps}  frame: ${timing.total.toFixed(1)} ms\n` +
+      `  load: ${load.toFixed(0)}%  idle: ${idle.toFixed(0)}%\n` +
       `  update: ${timing.update.toFixed(1)}  logic: ${timing.logic.toFixed(1)}  render: ${timing.render.toFixed(1)}\n` +
       `Entities: ${total}  ants: ${ants}  farms: ${farms}  resources: ${resources}\n` +
       `Draw calls: ${info.render.calls}  tris: ${info.render.triangles}  ` +
@@ -119,8 +121,9 @@ export class PerfOverlay {
     style.textContent = `
       .perf-overlay {
         position: fixed;
-        top: 8px;
-        right: 8px;
+        /* Sits to the right of the 🐞 debug button (left:12 + width:36 + gap:8). */
+        top: 12px;
+        left: 56px;
         z-index: 10000;
         pointer-events: none;
         font-family: monospace;

@@ -87,7 +87,7 @@ new ContextMenu(game, { isBlocked: () => placement.active });
 
 // Per-frame debug labels above any gameObject exposing getDebugInfo().
 const debugOverlay = new DebugOverlay(game, game.debug);
-const perfOverlay  = new PerfOverlay(game);
+const perfOverlay  = new PerfOverlay(game, game.debug);
 game.onTick = () => { debugOverlay.tick(); perfOverlay.tick(); };
 
 function startPlacement(defId, commit) {
