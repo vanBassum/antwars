@@ -12,6 +12,7 @@ import { TrainingHut } from './components/training_hut.js';
 import { FeedingTray } from './components/feeding_tray.js';
 import { Building } from './components/building.js';
 import { ConstructionSite } from './components/construction_site.js';
+import { InstancedBuilding } from './components/instanced_building.js';
 
 // Helper for player-placed buildings: spawn in CONSTRUCTING state with a
 // translucent ghost overlay, deferring the gameplay component until workers
@@ -56,7 +57,7 @@ export const ENTITY_DEFS = [
     modelUrl: 'assets/models/SugarNode.glb',
     createObject() {
       const go = new GameObject('Sugar Node');
-      go.object3D.add(cloneModel(this.modelUrl));
+      go.addComponent(new InstancedBuilding(this.modelUrl));
       go.addComponent(new ResourceNode({ type: 'sugar', amount: 25 }));
       return go;
     },
@@ -66,7 +67,7 @@ export const ENTITY_DEFS = [
     modelUrl: 'assets/models/Bush.glb',
     createObject() {
       const go = new GameObject('Bush');
-      go.object3D.add(cloneModel(this.modelUrl));
+      go.addComponent(new InstancedBuilding(this.modelUrl));
       go.addComponent(new ResourceNode({ type: 'wood', amount: 25 }));
       return go;
     },
@@ -77,8 +78,16 @@ export const ENTITY_DEFS = [
     constructionCost: { wood: 5 },
     createObject() {
       const go = new GameObject('Farm Plot');
-      go.object3D.add(cloneModel(this.modelUrl));
-      attachConstruction(go, this, (g) => g.addComponent(new FarmPlot()));
+      const tempMesh = cloneModel(this.modelUrl);
+      go.object3D.add(tempMesh);
+      const modelUrl = this.modelUrl;
+      attachConstruction(go, this, (g) => {
+        g.object3D.remove(tempMesh);
+        const ib = g.addComponent(new InstancedBuilding(modelUrl));
+        ib.start();
+        const fp = g.addComponent(new FarmPlot());
+        return fp;
+      });
       go.addComponent(new Building(this));
       return go;
     },
@@ -141,8 +150,16 @@ export const ENTITY_DEFS = [
     constructionCost: { wood: 5 },
     createObject() {
       const go = new GameObject('Feeding Tray');
-      go.object3D.add(cloneModel(this.modelUrl));
-      attachConstruction(go, this, (g) => g.addComponent(new FeedingTray()));
+      const tempMesh = cloneModel(this.modelUrl);
+      go.object3D.add(tempMesh);
+      const modelUrl = this.modelUrl;
+      attachConstruction(go, this, (g) => {
+        g.object3D.remove(tempMesh);
+        const ib = g.addComponent(new InstancedBuilding(modelUrl));
+        ib.start();
+        const ft = g.addComponent(new FeedingTray());
+        return ft;
+      });
       go.addComponent(new Building(this));
       return go;
     },

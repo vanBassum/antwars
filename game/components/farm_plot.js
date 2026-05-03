@@ -1,5 +1,7 @@
+import * as THREE from 'three';
 import { Component } from '../../engine/gameobject.js';
 import { cloneModel } from '../../engine/model_cache.js';
+import { InstancedBuilding } from './instanced_building.js';
 
 // `count` is how many crop instances spawn on the plot when it ripens —
 // each gets harvested individually for +1 yield, so a 5-count berry plot
@@ -87,7 +89,8 @@ export class FarmPlot extends Component {
     this._cropPulseT    = BOINK_DURATION;
 
     this._waterPulseT = PULSE_DURATION;
-    this._materials   = [];    // cloned per-instance for safe tinting
+    this._baseColor   = new THREE.Color(0xffffff);
+    this._tintColor   = new THREE.Color();
   }
 
   get state() { return this._state; }
@@ -170,20 +173,11 @@ export class FarmPlot extends Component {
   }
 
   start() {
-    this.gameObject.object3D.traverse(obj => {
-      if (!obj.isMesh || !obj.material) return;
-      const mats   = Array.isArray(obj.material) ? obj.material : [obj.material];
-      const cloned = mats.map(m => (m.color ? m.clone() : m));
-      obj.material = Array.isArray(obj.material) ? cloned : cloned[0];
-      for (const c of cloned) {
-        if (c.color) this._materials.push({ mat: c, base: c.color.clone() });
-      }
-    });
+    // Base mesh is rendered via InstancedBuilding — no per-mesh material
+    // cloning needed. Tinting goes through setColor() on the instance.
   }
 
   destroy() {
-    for (const { mat } of this._materials) mat.dispose();
-    this._materials = [];
     this._removeCropMeshes();
   }
 
@@ -219,24 +213,28 @@ export class FarmPlot extends Component {
       }
     }
 
-    // Plot tint — only meaningful while GROWING; reset to base otherwise.
-    if (this._state === FARM_STATE.GROWING) {
-      const factor = DARKEN_AT_DRY + (1 - DARKEN_AT_DRY) * this.waterLevel;
-      for (const { mat, base } of this._materials) {
-        mat.color.copy(base).multiplyScalar(factor);
+    // Plot tint via instanced color — only meaningful while GROWING.
+    const ib = this.gameObject.getComponent(InstancedBuilding);
+    if (ib) {
+      if (this._state === FARM_STATE.GROWING) {
+        const factor = DARKEN_AT_DRY + (1 - DARKEN_AT_DRY) * this.waterLevel;
+        this._tintColor.copy(this._baseColor).multiplyScalar(factor);
+        ib.setColor(this._tintColor);
+      } else {
+        ib.setColor(this._baseColor);
       }
-    } else {
-      for (const { mat, base } of this._materials) mat.color.copy(base);
     }
 
-    // Plot scale pulse on watering.
+    // Plot scale pulse on watering — sync instanced transform.
     if (this._waterPulseT < PULSE_DURATION) {
       this._waterPulseT += dt;
       const p = Math.min(1, this._waterPulseT / PULSE_DURATION);
       const s = 1 + 0.08 * Math.sin(p * Math.PI);
       this.gameObject.object3D.scale.setScalar(s);
+      if (ib) ib.syncTransform();
     } else {
       this.gameObject.object3D.scale.setScalar(1);
+      if (ib) ib.syncTransform();
     }
   }
 
