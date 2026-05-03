@@ -51,7 +51,13 @@ export class GOAPAgent extends Component {
           this.onGoalReached?.();
         } else {
           this.onPlanFailed?.();
-          this._retryTimer = 2; // wait 2s before trying again
+          // Wait before re-attempting a plan that just failed. 5s is long
+          // enough to keep failing-plan churn off the per-frame budget when
+          // many agents share the same unreachable goal (stress scene), and
+          // short enough that ants visibly resume work once new claims open
+          // up. invalidate() clears this timer for event-driven wakeups
+          // (player-queued tasks, preemption).
+          this._retryTimer = 5;
         }
         return;
       }
