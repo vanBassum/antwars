@@ -122,7 +122,13 @@ export class GOAPAgent extends Component {
       }
 
       this._currentAction = this._plan.shift();
-      this._currentAction.enter(this);
+      if (profile) {
+        const t0 = performance.now();
+        this._currentAction.enter(this);
+        bumpBucket(profile, 'GOAP·enter', performance.now() - t0);
+      } else {
+        this._currentAction.enter(this);
+      }
     }
 
     // Execute current action
@@ -135,8 +141,15 @@ export class GOAPAgent extends Component {
       done = this._currentAction.perform(this, dt);
     }
     if (done) {
-      this.worldState = this._currentAction.applyEffects(this.worldState);
-      this._currentAction.exit(this);
+      if (profile) {
+        const t0 = performance.now();
+        this.worldState = this._currentAction.applyEffects(this.worldState);
+        this._currentAction.exit(this);
+        bumpBucket(profile, 'GOAP·finish', performance.now() - t0);
+      } else {
+        this.worldState = this._currentAction.applyEffects(this.worldState);
+        this._currentAction.exit(this);
+      }
       this._currentAction = null;
     }
   }
