@@ -12,6 +12,20 @@ function bumpBucket(profile, name, ms) {
   entry.count += 1;
 }
 
+// Deterministic key over a worldState + goal pair, used by GOAPAgent's
+// per-agent plan cache. Relies on object property insertion order being
+// stable, which it is in V8/SpiderMonkey for non-numeric string keys.
+// Cheaper than the planner's internal stateKey (no sort, no map, no
+// allocation per field) at the cost of being key-set-sensitive.
+function planKey(state, goal) {
+  if (!state || !goal) return null;
+  let key = '';
+  for (const k in state) key += k + '=' + state[k] + ';';
+  key += '|';
+  for (const k in goal) key += k + '=' + goal[k] + ';';
+  return key;
+}
+
 export class GOAPAgent extends Component {
   constructor() {
     super();
@@ -23,6 +37,15 @@ export class GOAPAgent extends Component {
     this._currentAction = null;
     this._retryTimer = 0;
     this._inUpdate = false;
+
+    // Last-plan cache: when worldState+goal hash matches the previous
+    // successful plan, reuse it without re-running A*. The structural plan
+    // is identical across cycles for the same goal under the same flags
+    // (e.g. every harvest cycle is GoToHarvest→Collect→GoToHive→Deposit
+    // regardless of which specific node we target — actions late-bind via
+    // task.target). Cleared by _doInvalidate.
+    this._cachedPlan = null;
+    this._cachedKey  = null;
   }
 
   _goalMet() {
@@ -61,13 +84,24 @@ export class GOAPAgent extends Component {
     // chain), and `invalidate()` clears _plan on real-world failures.
     if (!this._currentAction) {
       if (this._plan.length === 0) {
-        if (profile) {
-          const t0 = performance.now();
-          this._plan = planner.plan(this.actions, this.worldState, this.goal) ?? [];
-          bumpBucket(profile, 'GOAP·plan', performance.now() - t0);
-          if (this._plan.length === 0) bumpBucket(profile, 'GOAP·plan-fail', 0);
+        const key = planKey(this.worldState, this.goal);
+        if (key !== null && key === this._cachedKey && this._cachedPlan) {
+          // Same worldState+goal as our last successful plan — reuse.
+          this._plan = this._cachedPlan.slice();
+          if (profile) bumpBucket(profile, 'GOAP·plan-hit', 0);
         } else {
-          this._plan = planner.plan(this.actions, this.worldState, this.goal) ?? [];
+          if (profile) {
+            const t0 = performance.now();
+            this._plan = planner.plan(this.actions, this.worldState, this.goal) ?? [];
+            bumpBucket(profile, 'GOAP·plan', performance.now() - t0);
+            if (this._plan.length === 0) bumpBucket(profile, 'GOAP·plan-fail', 0);
+          } else {
+            this._plan = planner.plan(this.actions, this.worldState, this.goal) ?? [];
+          }
+          if (this._plan.length > 0 && key !== null) {
+            this._cachedPlan = this._plan.slice();
+            this._cachedKey  = key;
+          }
         }
       }
 
@@ -122,6 +156,10 @@ export class GOAPAgent extends Component {
     this._currentAction = null;
     this._plan = [];
     this._retryTimer = 0;
+    // Don't clear _cachedPlan/_cachedKey here — the cache key includes the
+    // current worldState+goal, so a re-plan on different inputs naturally
+    // misses, and a re-plan on the same inputs (the common case after
+    // abandonment when the cycle kind stays the same) hits and skips A*.
   }
 
   get currentActionName() {
