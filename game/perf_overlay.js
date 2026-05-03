@@ -6,7 +6,6 @@ import { Component } from '../engine/gameobject.js';
 
 const HISTORY_SIZE = 120; // frames of history for the graph
 const TARGET_MS    = 1000 / 60; // 60fps budget — matches the green line on the graph
-const TOP_COMPONENTS = 6; // how many component types to show in the breakdown
 
 export class PerfOverlay {
   constructor(game, debug) {
@@ -55,8 +54,10 @@ export class PerfOverlay {
     const timing = game.frameTiming;
     if (!timing) return;
 
-    // FPS (rolling average updated ~2x/sec)
-    this._fpsAccum += timing.total;
+    // FPS (rolling average updated ~2x/sec) — uses actual wall-clock interval
+    // between frames, not the work-time inside _tick. With a 60fps cap the
+    // interval is ~16.67ms and FPS reads ~60.
+    this._fpsAccum += timing.frameInterval ?? timing.total;
     this._fpsFrames++;
     const now = performance.now();
     if (now - this._lastFpsUpdate > 500) {
@@ -97,12 +98,11 @@ export class PerfOverlay {
       `Draw calls: ${info.render.calls}  tris: ${info.render.triangles}  ` +
       `geom: ${info.memory.geometries}  tex: ${info.memory.textures}`;
 
-    // Top component update costs (sum across all instances of each class)
+    // Per-component update costs, alphabetical for stable row order
     const comps = timing.components;
     if (comps && comps.length) {
       text += '\nUpdate breakdown (ms / count):';
-      for (let i = 0; i < Math.min(TOP_COMPONENTS, comps.length); i++) {
-        const c = comps[i];
+      for (const c of comps) {
         text += `\n  ${c.name.padEnd(16)} ${c.ms.toFixed(2).padStart(5)}  x${c.count}`;
       }
     }

@@ -29,7 +29,8 @@ Component.snapshotProfile = function () {
     if (entry.count === 0) continue;
     out.push({ name, ms: entry.ms, count: entry.count });
   }
-  out.sort((a, b) => b.ms - a.ms);
+  // Alphabetical so HUD rows stay in a stable position frame-to-frame
+  out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 };
 

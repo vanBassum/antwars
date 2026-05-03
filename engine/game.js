@@ -86,7 +86,14 @@ export class Game {
   }
 
   _tick(time) {
-    const rawDt = Math.min((time - this._lastTime) / 1000, 0.1);
+    // Cap simulation+render at ~60fps so high-refresh-rate monitors don't burn
+    // CPU on extra ticks. The 1ms slack accounts for vsync jitter — without it
+    // a 144Hz display sometimes lands just under the threshold and we'd skip
+    // every other 60Hz tick.
+    const elapsedMs = time - this._lastTime;
+    if (elapsedMs < Game.TARGET_FRAME_MS - 1) return;
+
+    const rawDt = Math.min(elapsedMs / 1000, 0.1);
     this._lastTime = time;
     const dt = rawDt * this.timeScale;
     this.elapsed += dt;
@@ -107,7 +114,12 @@ export class Game {
       logic:  t2 - t1,
       render: t3 - t2,
       total:  t3 - t0,
+      // Wall-clock interval since the last tick that actually ran. Use this
+      // for FPS — `total` is just the work time inside _tick.
+      frameInterval: elapsedMs,
       components: Component.profileEnabled ? Component.snapshotProfile() : null,
     };
   }
 }
+
+Game.TARGET_FRAME_MS = 1000 / 60;
