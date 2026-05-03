@@ -61,6 +61,7 @@ await Promise.all([
   loadModel('assets/models/BerryBush.glb'),
   loadModel('assets/models/Egg.glb'),
   loadModel('assets/models/FeedingTray.glb'),
+  loadModel('assets/models/HoneyBlob.glb'),
 ]);
 
 // Hex size = anthill footprint inscribed exactly (flat-to-flat = sqrt(3) * size)

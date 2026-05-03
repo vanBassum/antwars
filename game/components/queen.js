@@ -114,10 +114,9 @@ export class Queen extends Component {
   }
 
   _isAtTray() {
-    if (!this._drinkTarget) return false;
-    const dx = this._drinkTarget.position.x - this.gameObject.position.x;
-    const dz = this._drinkTarget.position.z - this.gameObject.position.z;
-    return (dx * dx + dz * dz) < 2.0; // close enough to adjacent hex
+    // When _drinkTarget is set, _seekTray pathed us to the tray's approach
+    // hex, so mover.arrived means we're standing next to it.
+    return !!this._drinkTarget;
   }
 
   _startDrinking() {
