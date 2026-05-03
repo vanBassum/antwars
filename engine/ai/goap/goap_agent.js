@@ -36,9 +36,15 @@ export class GOAPAgent extends Component {
       return;
     }
 
-    // Need a new action — replan
+    // Need a new action — pull the next from the queued plan, or replan if
+    // empty. Re-planning every action transition would be wasteful: a 4-action
+    // harvest cycle would plan 4 times when one plan covers all of it. The
+    // queued steps stay valid by construction (planner walks the precondition
+    // chain), and `invalidate()` clears _plan on real-world failures.
     if (!this._currentAction) {
-      this._plan = planner.plan(this.actions, this.worldState, this.goal) ?? [];
+      if (this._plan.length === 0) {
+        this._plan = planner.plan(this.actions, this.worldState, this.goal) ?? [];
+      }
 
       if (this._plan.length === 0) {
         if (this._goalMet()) {
