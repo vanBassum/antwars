@@ -40,6 +40,16 @@ export class Game {
     this.renderer.setSize(w, h);
     this._container.appendChild(this.renderer.domElement);
 
+    // GPU-side timing via EXT_disjoint_timer_query_webgl2. Required because
+    // WebGL is async — renderer.render() submits commands and returns; the
+    // GPU does the work later. CPU-side performance.now() can't tell us
+    // whether a fat render is JS+driver overhead or actual GPU work.
+    // Results trail by a few frames (queries are read after they complete).
+    const gl = this.renderer.getContext();
+    this._gpuTimerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    this._pendingGpuQueries = [];
+    this._lastGpuMs = 0;
+
     const ro = new ResizeObserver(() => {
       const w = this._container.clientWidth;
       const h = this._container.clientHeight;
@@ -104,7 +114,50 @@ export class Game {
     const t1 = performance.now();
     this.onTick?.(dt);
     const t2 = performance.now();
-    if (this.camera) this.renderer.render(this.scene, this.camera);
+
+    // Render — split into:
+    //   render·matrix   : scene.updateMatrixWorld (recursive transform refresh)
+    //   render·three    : the rest of renderer.render (build render list, submit
+    //                     draw calls, shadow + main passes — all CPU-side WebGL)
+    //   render·gpu      : actual GPU-side work, measured via EXT timer query
+    //                     (async; reads results from previous frames)
+    let matrixMs = 0, threeMs = 0;
+    if (this.camera) {
+      const tm0 = performance.now();
+      this.scene.updateMatrixWorld(true);
+      const tm1 = performance.now();
+      matrixMs = tm1 - tm0;
+
+      const ext = this._gpuTimerExt;
+      const gl  = ext ? this.renderer.getContext() : null;
+      let query = null;
+      if (ext && gl) {
+        query = gl.createQuery();
+        gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
+      }
+
+      const tr0 = performance.now();
+      this.renderer.render(this.scene, this.camera);
+      const tr1 = performance.now();
+      threeMs = tr1 - tr0;
+
+      if (ext && gl && query) {
+        gl.endQuery(ext.TIME_ELAPSED_EXT);
+        this._pendingGpuQueries.push(query);
+        // Drain any completed queries — typically 1-3 frames behind submission.
+        while (this._pendingGpuQueries.length > 0) {
+          const q = this._pendingGpuQueries[0];
+          if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+          const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
+          if (!disjoint) {
+            this._lastGpuMs = gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
+          }
+          gl.deleteQuery(q);
+          this._pendingGpuQueries.shift();
+        }
+      }
+    }
+
     const t3 = performance.now();
 
     // Expose per-frame subsystem timings (ms) for perf overlay
@@ -112,6 +165,9 @@ export class Game {
       update: t1 - t0,
       logic:  t2 - t1,
       render: t3 - t2,
+      renderMatrix: matrixMs,
+      renderThree:  threeMs,
+      renderGpu:    this._lastGpuMs,
       total:  t3 - t0,
       // Wall-clock interval since the last tick that actually ran. Use this
       // for FPS — `total` is just the work time inside _tick.

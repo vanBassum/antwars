@@ -53,10 +53,13 @@ export class PerfOverlay {
     // Per-component-name rolling stats for the breakdown rows.
     this._compStats = new Map();
     // Top-line rolling stats — instantaneous values jitter too much to read.
-    this._frameStats  = new StatsRing(STATS_WINDOW);
-    this._updateStats = new StatsRing(STATS_WINDOW);
-    this._logicStats  = new StatsRing(STATS_WINDOW);
-    this._renderStats = new StatsRing(STATS_WINDOW);
+    this._frameStats        = new StatsRing(STATS_WINDOW);
+    this._updateStats       = new StatsRing(STATS_WINDOW);
+    this._logicStats        = new StatsRing(STATS_WINDOW);
+    this._renderStats       = new StatsRing(STATS_WINDOW);
+    this._renderMatrixStats = new StatsRing(STATS_WINDOW);
+    this._renderThreeStats  = new StatsRing(STATS_WINDOW);
+    this._renderGpuStats    = new StatsRing(STATS_WINDOW);
 
     // Component-level profiling is gated to when the overlay is visible —
     // the per-update performance.now() pair has measurable cost on hot loops
@@ -131,6 +134,9 @@ export class PerfOverlay {
     this._updateStats.push(timing.update);
     this._logicStats.push(timing.logic);
     this._renderStats.push(timing.render);
+    this._renderMatrixStats.push(timing.renderMatrix ?? 0);
+    this._renderThreeStats .push(timing.renderThree  ?? 0);
+    this._renderGpuStats   .push(timing.renderGpu    ?? 0);
 
     const frameAvg  = this._frameStats.avg();
     const frameMax  = this._frameStats.max();
@@ -140,6 +146,12 @@ export class PerfOverlay {
     const logicMax  = this._logicStats.max();
     const renderAvg = this._renderStats.avg();
     const renderMax = this._renderStats.max();
+    const matrixAvg = this._renderMatrixStats.avg();
+    const matrixMax = this._renderMatrixStats.max();
+    const threeAvg  = this._renderThreeStats.avg();
+    const threeMax  = this._renderThreeStats.max();
+    const gpuAvg    = this._renderGpuStats.avg();
+    const gpuMax    = this._renderGpuStats.max();
 
     // Main-thread load: how much of the 60fps budget the game loop ate, on
     // average. The remainder is idle headroom inside _tick — note this
@@ -174,6 +186,9 @@ export class PerfOverlay {
       `  update: ${updateAvg.toFixed(1)} / ${updateMax.toFixed(1)}  ` +
       `logic: ${logicAvg.toFixed(1)} / ${logicMax.toFixed(1)}  ` +
       `render: ${renderAvg.toFixed(1)} / ${renderMax.toFixed(1)}\n` +
+      `  matrix: ${matrixAvg.toFixed(1)} / ${matrixMax.toFixed(1)}  ` +
+      `three: ${threeAvg.toFixed(1)} / ${threeMax.toFixed(1)}  ` +
+      `gpu: ${gpuAvg.toFixed(1)} / ${gpuMax.toFixed(1)}\n` +
       `Entities: ${total}  ants: ${ants}  farms: ${farms}  resources: ${resources}\n` +
       `Draw calls: ${info.render.calls}  tris: ${info.render.triangles}  ` +
       `geom: ${info.memory.geometries}  tex: ${info.memory.textures}\n` +
