@@ -21,7 +21,7 @@ import { SpeedControls } from './speed_controls.js';
 const game = new Game();
 game.resources = new Resources();
 game.resources.set('sugar', 10);
-game.resources.set('wood',  10);
+game.resources.set('wood',  15);
 game.debug     = new DebugMode();
 new ResourceBar(game.resources, [
   { key: 'sugar', icon: '🍬', iconUrl: 'assets/icons/SugarNode.png', label: 'Sugar' },
