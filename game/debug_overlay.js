@@ -9,15 +9,22 @@ import * as THREE from 'three';
 // to screen space.
 export class DebugOverlay {
   constructor(game, debug) {
-    this._game   = game;
-    this._debug  = debug;
-    this._labels = new Map();         // gameObject → DOM element
-    this._proj   = new THREE.Vector3();
+    this._game     = game;
+    this._debug    = debug;
+    this._labels   = new Map();   // gameObject → { el, lastContent, hidden }
+    this._proj     = new THREE.Vector3();
+    this._enabled  = true;        // separately toggleable from game.debug; see F6 in main.js
   }
+
+  setEnabled(on) {
+    this._enabled = on;
+    if (!on) this._teardown();
+  }
+  isEnabled() { return this._enabled; }
 
   // Drive me from the game tick (game.onTick).
   tick() {
-    if (!this._debug.enabled) {
+    if (!this._debug.enabled || !this._enabled) {
       if (this._labels.size > 0) this._teardown();
       return;
     }
@@ -34,43 +41,62 @@ export class DebugOverlay {
       if (!provider) continue;
       seen.add(go);
 
-      let label = this._labels.get(go);
-      if (!label) {
-        label = document.createElement('div');
-        label.className = 'debug-overlay';
-        document.body.append(label);
-        this._labels.set(go, label);
+      let entry = this._labels.get(go);
+      if (!entry) {
+        const el = document.createElement('div');
+        el.className = 'debug-overlay';
+        document.body.append(el);
+        entry = { el, lastContent: '', hidden: false };
+        this._labels.set(go, entry);
       }
-
-      const info = provider.getDebugInfo() ?? {};
-      label.innerHTML =
-        `<span class="dbg-task">${info.task ?? '?'}</span>` +
-        `<span class="dbg-meta">→ ${info.target ?? '—'} · ${info.carrying ?? 'empty'}</span>`;
 
       this._proj.copy(go.position);
       this._proj.y += 0.5; // float a touch above the entity
       this._proj.project(camera);
 
-      // Hide if behind camera.
-      if (this._proj.z > 1) {
-        label.style.display = 'none';
+      // Hide if behind camera or off-screen — saves the innerHTML/style work
+      // entirely. With 600 ants this is the largest per-frame win.
+      const offscreen = this._proj.z > 1
+        || this._proj.x < -1.05 || this._proj.x > 1.05
+        || this._proj.y < -1.05 || this._proj.y > 1.05;
+      if (offscreen) {
+        if (!entry.hidden) {
+          entry.el.style.display = 'none';
+          entry.hidden = true;
+        }
         continue;
       }
+      if (entry.hidden) {
+        entry.el.style.display = '';
+        entry.hidden = false;
+      }
+
+      // Only rewrite innerHTML when the content actually changed. The
+      // task/target/carrying triple updates every few seconds per ant, not
+      // every frame, so most calls hit the cache.
+      const info = provider.getDebugInfo() ?? {};
+      const content =
+        `<span class="dbg-task">${info.task ?? '?'}</span>` +
+        `<span class="dbg-meta">→ ${info.target ?? '—'} · ${info.carrying ?? 'empty'}</span>`;
+      if (content !== entry.lastContent) {
+        entry.el.innerHTML = content;
+        entry.lastContent = content;
+      }
+
       const x = (this._proj.x *  0.5 + 0.5) * w + rect.left;
       const y = (this._proj.y * -0.5 + 0.5) * h + rect.top;
-      label.style.display = '';
-      label.style.left = `${x}px`;
-      label.style.top  = `${y}px`;
+      entry.el.style.left = `${x}px`;
+      entry.el.style.top  = `${y}px`;
     }
 
     // Drop labels for entities that have left the scene.
-    for (const [go, el] of this._labels) {
-      if (!seen.has(go)) { el.remove(); this._labels.delete(go); }
+    for (const [go, entry] of this._labels) {
+      if (!seen.has(go)) { entry.el.remove(); this._labels.delete(go); }
     }
   }
 
   _teardown() {
-    for (const el of this._labels.values()) el.remove();
+    for (const entry of this._labels.values()) entry.el.remove();
     this._labels.clear();
   }
 }

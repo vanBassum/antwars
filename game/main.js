@@ -61,6 +61,14 @@ window.addEventListener('keydown', (e) => {
       console.log('ant shadows:', on ? 'ON' : 'OFF');
     }
   }
+  // F6: toggle the per-ant debug DOM labels (separate from the perf HUD).
+  // 600 DOM elements with per-frame innerHTML/style writes can drive enough
+  // browser layout work to dwarf the WebGL render time.
+  if (e.code === 'F6') {
+    e.preventDefault();
+    debugOverlay.setEnabled(!debugOverlay.isEnabled());
+    console.log('debug labels:', debugOverlay.isEnabled() ? 'ON' : 'OFF');
+  }
 });
 
 new SpeedControls(game);
