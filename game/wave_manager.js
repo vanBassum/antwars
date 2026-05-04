@@ -37,26 +37,27 @@ export class WaveManager {
     }
   }
 
-  // Pick `count` random world positions from the outermost hex ring.
+  // Pick `count` world positions from one random side of the hex ring,
+  // clustered around the midpoint of that side so all enemies arrive together.
   _edgePositions(count) {
-    const grid = this._game.hexGrid;
-    const R    = grid.radius;
+    const grid   = this._game.hexGrid;
+    const R      = grid.radius;
+    const STARTS = [[R,0],[0,R],[-R,R],[-R,0],[0,-R],[R,-R]];
+    const WALK   = [[-1,1],[-1,0],[0,-1],[1,-1],[1,0],[0,1]];
 
-    // Use allHexes() and keep only those whose cube-coordinate max == R
-    // (the exact boundary ring). More reliable than a manual ring walk.
-    const candidates = [];
-    for (const { q, r } of grid.allHexes()) {
-      if (Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r)) === R) {
-        candidates.push(grid.hexToWorld(q, r));
-      }
+    const side      = Math.floor(Math.random() * 6);
+    const [dq, dr]  = WALK[side];
+    let   [q,  r]   = STARTS[side];
+    const hexes     = [];
+    for (let i = 0; i < R; i++) {
+      hexes.push(grid.hexToWorld(q, r));
+      q += dq; r += dr;
     }
 
-    // Fisher-Yates shuffle then slice.
-    for (let i = candidates.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-    }
-    return candidates.slice(0, Math.min(count, candidates.length));
+    const n     = Math.min(count, hexes.length);
+    const mid   = Math.floor(hexes.length / 2);
+    const start = Math.max(0, Math.min(hexes.length - n, mid - Math.floor(n / 2)));
+    return hexes.slice(start, start + n);
   }
 
   _buildHud() {
