@@ -162,8 +162,8 @@ game.onTick = (dt) => { game.waveManager.update(dt); debugOverlay.tick(); perfOv
 function startPlacement(defId, commit) {
   const def = ENTITY_DEFS.find(d => d.id === defId);
   if (!def) return;
-  actionBar.showCancel(() => placement.cancel());
-  placement.start(def, commit, () => actionBar.hideCancel());
+  actionBar.setPlacing(true);
+  placement.start(def, commit, () => actionBar.setPlacing(false));
 }
 
 // Worker ants are no longer spawned directly from the ActionBar — they come

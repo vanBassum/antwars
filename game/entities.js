@@ -97,7 +97,7 @@ export const ENTITY_DEFS = [
     modelUrl: 'assets/models/Ant.glb',
     createObject(game) {
       const go = new GameObject('Ant');
-      go.addComponent(new Mover(1.5));
+      go.addComponent(new Mover(2.25));
       go.addComponent(new GOAPAgent());
       go.addComponent(new Worker());
       go.addComponent(new Health({ hp: 2, onDeath: (g) => g.game.remove(g),
