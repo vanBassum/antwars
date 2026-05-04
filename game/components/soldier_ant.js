@@ -2,14 +2,11 @@ import { Component } from '../../engine/gameobject.js';
 import { Mover } from '../../engine/components/mover.js';
 import { Health } from '../../engine/components/health.js';
 import { CombatAnimator } from '../../engine/components/combat_animator.js';
-import { smoothPath } from '../../engine/hex/smooth_path.js'; // used by _patrol
-
-const AGGRO_RANGE      = 10;
-const ATTACK_RANGE     = 2.2;
-const SLOT_DIST        = ATTACK_RANGE * 0.8;
-const ATTACK_INTERVAL  = 1.0; // seconds between hits
-const REPATH_INTERVAL  = 2.0; // seconds between path updates in combat
-const PATROL_RADIUS    = 3;   // hex radius for idle patrol around post
+const AGGRO_RANGE     = 10;
+const ATTACK_RANGE    = 2.2;
+const SLOT_DIST       = ATTACK_RANGE * 0.8;
+const ATTACK_INTERVAL = 1.0;
+const REPATH_INTERVAL = 2.0;
 
 export class SoldierAnt extends Component {
   start() {
@@ -19,7 +16,6 @@ export class SoldierAnt extends Component {
     this._target      = null;
     this._attackTimer = 0;
     this._repathTimer = 0;
-    this._wanderTimer = Math.random() * 2;
     this._angleJitter = (Math.random() - 0.5) * 0.6;
     this._commandPos  = null;
   }
@@ -87,36 +83,10 @@ export class SoldierAnt extends Component {
     }
   }
 
-  _updateIdle(dt, mover, game) {
-    if (!mover.arrived) return;
-    this._wanderTimer -= dt;
-    if (this._wanderTimer > 0) return;
-    this._wanderTimer = 3 + Math.random() * 3;
-    this._patrol(mover, game);
+  _updateIdle(_dt, _mover, _game) {
+    // Hold position — no wandering.
   }
 
-  _patrol(mover, game) {
-    const grid = game.hexGrid;
-    if (!grid || !this._postHex) return;
-
-    const ph = this._postHex;
-    const candidates = [];
-    for (let q = ph.q - PATROL_RADIUS; q <= ph.q + PATROL_RADIUS; q++) {
-      for (let r = ph.r - PATROL_RADIUS; r <= ph.r + PATROL_RADIUS; r++) {
-        if (grid.hexDistance(q, r, ph.q, ph.r) > PATROL_RADIUS) continue;
-        if (!grid.isWalkable(q, r)) continue;
-        candidates.push({ q, r });
-      }
-    }
-    if (candidates.length === 0) return;
-
-    const target = candidates[Math.floor(Math.random() * candidates.length)];
-    const pos    = this.gameObject.position;
-    const from   = grid.worldToHex(pos.x, pos.z);
-    const path   = grid.findPath(from.q, from.r, target.q, target.r);
-    if (!path || path.length < 2) return;
-    mover.moveAlong(smoothPath(grid, pos, path));
-  }
 
   _pathTo(target, mover) {
     const pos  = this.gameObject.position;
