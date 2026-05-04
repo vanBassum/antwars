@@ -5,7 +5,195 @@
   <title>Armymen RTS</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; }
+    html, body { width: 100%; height: 100%; }
+    body { background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+    .resource-bar {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 16px; padding: 8px 14px;
+      background: rgba(0, 0, 0, 0.55); border-radius: 8px;
+      color: #fff; font-size: 16px; z-index: 1000; pointer-events: none;
+      backdrop-filter: blur(6px);
+    }
+    .resource-item  { display: flex; align-items: center; gap: 6px; }
+    .resource-icon  { font-size: 20px; }
+    img.resource-icon { width: 24px; height: 24px; object-fit: contain; }
+    .resource-count { font-weight: 600; min-width: 30px; text-align: right; }
+    .action-bar {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 8px; z-index: 1000;
+    }
+    .action-btn {
+      width: 64px; height: 64px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 2px;
+      background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px; color: #fff;
+      font-size: 11px; cursor: pointer; backdrop-filter: blur(6px);
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .action-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.4);
+    }
+    .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .action-btn.cancel-btn {
+      border-color: rgba(255, 80, 80, 0.6); color: #ff6b6b;
+    }
+    .action-btn.cancel-btn:hover {
+      background: rgba(255, 60, 60, 0.25); border-color: rgba(255, 80, 80, 0.8);
+    }
+    .action-btn .action-icon { font-size: 28px; line-height: 1; }
+    img.action-icon { width: 40px; height: 40px; object-fit: contain; }
+    .action-btn .action-cost { font-size: 11px; opacity: 0.85; }
+    .context-menu {
+      position: fixed; z-index: 1100;
+      display: flex; flex-direction: column; gap: 4px;
+      padding: 8px; min-width: 180px;
+      background: rgba(0, 0, 0, 0.78); border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px; color: #fff;
+      font-size: 13px; backdrop-filter: blur(6px);
+    }
+    .context-menu-title {
+      font-size: 14px; font-weight: 600;
+      padding: 2px 4px 4px;
+    }
+    .context-menu.has-corner .context-menu-title { padding-right: 56px; }
+    .context-menu-corner {
+      position: absolute; top: 4px; right: 4px;
+      display: flex; gap: 2px;
+    }
+    .corner-btn {
+      width: 22px; height: 22px; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: transparent; border: 1px solid transparent;
+      border-radius: 3px; color: #fff;
+      font-size: 13px; line-height: 1; cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .corner-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    .corner-btn.danger:hover {
+      background: rgba(255, 80, 80, 0.25);
+      border-color: rgba(255, 80, 80, 0.6);
+    }
+    .context-menu-state {
+      font-size: 12px; opacity: 0.75; padding: 0 4px 4px;
+    }
+    .context-menu-progress {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px; font-size: 12px;
+    }
+    .context-menu-progress .progress-label {
+      min-width: 60px; opacity: 0.75;
+    }
+    .context-menu-progress .progress-bar {
+      flex: 1; height: 6px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px; overflow: hidden;
+    }
+    .context-menu-progress .progress-fill {
+      height: 100%; background: #6a8e3a;
+      transition: width 0.2s ease-out;
+    }
+    .context-menu-progress .progress-text {
+      font-variant-numeric: tabular-nums;
+      font-size: 11px; opacity: 0.85;
+      min-width: 50px; text-align: right;
+    }
+    .context-menu-btn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; background: transparent;
+      border: 1px solid transparent; border-radius: 4px;
+      color: #fff; font-size: 13px; cursor: pointer; text-align: left;
+    }
+    .context-menu-btn:hover    { background: rgba(255, 255, 255, 0.12); }
+    .context-menu-btn.selected {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+    .context-menu-btn .btn-icon  { font-size: 18px; }
+    img.btn-icon { width: 22px; height: 22px; object-fit: contain; }
+    .context-menu-btn .btn-label { font-weight: 500; }
+    .context-menu-picker {
+      display: flex; gap: 4px; padding: 4px 4px 2px;
+    }
+    .picker-icon { font-size: 22px; line-height: 1; }
+    img.picker-icon { width: 26px; height: 26px; object-fit: contain; }
+    .picker-btn {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 4px; color: #fff;
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .picker-btn:hover { background: rgba(255, 255, 255, 0.16); }
+    .picker-btn.selected {
+      background: rgba(255, 255, 255, 0.28);
+      border-color: rgba(255, 255, 255, 0.65);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+    }
+    .speed-controls {
+      position: fixed; top: 12px; right: 12px;
+      display: flex; gap: 4px; z-index: 1000;
+    }
+    .speed-btn {
+      min-width: 40px; height: 36px; padding: 0 10px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px; color: #fff;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      backdrop-filter: blur(6px);
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .speed-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.4); }
+    .speed-btn.selected {
+      background: rgba(255, 255, 255, 0.28);
+      border-color: rgba(255, 255, 255, 0.65);
+    }
+    .speed-btn.pause-btn { color: #ffb070; font-size: 11px; letter-spacing: 1px; }
+    .debug-toggle {
+      position: fixed; top: 12px; left: 12px;
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px; color: #fff;
+      font-size: 18px; cursor: pointer; z-index: 1000;
+      backdrop-filter: blur(6px);
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .debug-toggle:hover { background: rgba(255, 255, 255, 0.15); }
+    .debug-toggle.active {
+      background: rgba(255, 110, 40, 0.55);
+      border-color: rgba(255, 200, 100, 0.7);
+    }
+    /* Resource bar — debug mode makes the items clickable */
+    .resource-bar.debug { pointer-events: auto; }
+    .resource-bar.debug .resource-item {
+      cursor: pointer;
+      padding: 2px 4px; margin: -2px -4px;
+      border-radius: 4px;
+      transition: background 0.1s;
+    }
+    .resource-bar.debug .resource-item:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+    /* Per-ant debug overlay (DOM labels positioned via projection) */
+    .debug-overlay {
+      position: fixed; pointer-events: none;
+      transform: translate(-50%, -100%);
+      padding: 2px 6px;
+      background: rgba(0, 0, 0, 0.7); border: 1px solid rgba(255, 200, 100, 0.4);
+      border-radius: 3px; color: #ffd9a0;
+      font-size: 10px; line-height: 1.3;
+      white-space: nowrap; z-index: 900;
+      display: flex; flex-direction: column; align-items: center;
+      backdrop-filter: blur(2px);
+    }
+    .debug-overlay .dbg-task { font-weight: 600; }
+    .debug-overlay .dbg-meta { font-size: 9px; opacity: 0.75; }
   </style>
 <script type="importmap">
   {

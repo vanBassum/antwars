@@ -102,7 +102,7 @@ export class TerrainMap {
    * bases: number  — how many bases to place (teamIndex assigned 0..n-1)
    *      | array   — [{ teamIndex }, ...] for explicit team assignment
    */
-  constructor({ width = 128, depth = 128, seed = 42, bases = 0 } = {}) {
+  constructor({ width = 128, depth = 128, seed = 42, bases = 0, flat = false } = {}) {
     this.width = width;
     this.depth = depth;
     this.seed  = seed;
@@ -112,7 +112,15 @@ export class TerrainMap {
       : bases;
 
     this.bases = [];
-    this.cells = this._generate(baseDefs);
+    this.cells = flat ? this._generateFlat() : this._generate(baseDefs);
+  }
+
+  _generateFlat() {
+    const cells = new Array(this.width * this.depth);
+    for (let i = 0; i < cells.length; i++) {
+      cells[i] = { height: 0.5, type: TerrainType.GRASS };
+    }
+    return cells;
   }
 
   // Returns { height, type } for cell (x, z), or null if out of bounds.

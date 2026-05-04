@@ -4,7 +4,15 @@
       "Bash(ls /c/Users/bas/Downloads*)",
       "Bash(unzip -l /c/Users/bas/Downloads/*)",
       "Bash(unzip -p /c/Users/bas/Downloads/* *)",
-      "Bash(cp /c/Users/bas/Downloads/* *)"
+      "Bash(cp /c/Users/bas/Downloads/* *)",
+      "Bash(ls C:/Users/basvi/Downloads/*)",
+      "Bash(ls -t C:/Users/basvi/Downloads/*)",
+      "Bash(python c:/Workspace/antwars/tools/auto_import/generate_and_import.py *)",
+      "Bash(python C:/Workspace/antwars/tools/auto_import/generate_and_import.py *)",
+      "Bash(ls C:/Workspace/antwars/assets/*)",
+      "Bash(curl -s --max-time * http://127.0.0.1:42003/*)",
+      "Bash(git -C C:/Workspace/antwars worktree *)",
+      "Bash(git -C C:/Workspace/antwars branch -D *)"
     ]
   }
 }
