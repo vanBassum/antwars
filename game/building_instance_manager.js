@@ -5,26 +5,41 @@ import { InstancedMeshGroup } from '../engine/instanced_mesh_group.js';
 // and unregister on destroy — batching draw calls for multi-instance types.
 export class BuildingInstanceManager {
   constructor(scene) {
-    this._groups = new Map(); // modelUrl → InstancedMeshGroup
-    this._scene = scene;
+    this._groups   = new Map(); // modelUrl → InstancedMeshGroup
+    this._goLookup = new Map(); // `${modelUrl}#${instanceId}` → gameObject
+    this._scene    = scene;
   }
 
-  register(modelUrl, matrix) {
+  register(modelUrl, matrix, go = null) {
     let group = this._groups.get(modelUrl);
     if (!group) {
       // Sized for the stress scene's biggest single-type count (50 farm plots).
       group = new InstancedMeshGroup(modelUrl, { capacity: 256 });
+      // Tag each InstancedMesh with the modelUrl so ContextMenu can do reverse lookup.
+      for (const mesh of group.getMeshObjects()) mesh.userData._ibModelUrl = modelUrl;
       this._groups.set(modelUrl, group);
       this._scene.add(group.object3D);
     }
     const instanceId = group.addInstance(matrix);
+    if (go) this._goLookup.set(`${modelUrl}#${instanceId}`, go);
     return { groupKey: modelUrl, instanceId };
   }
 
   unregister(reg) {
     if (!reg) return;
+    this._goLookup.delete(`${reg.groupKey}#${reg.instanceId}`);
     const group = this._groups.get(reg.groupKey);
     if (group) group.removeInstance(reg.instanceId);
+  }
+
+  getInstancedMeshObjects() {
+    const out = [];
+    for (const group of this._groups.values()) out.push(...group.getMeshObjects());
+    return out;
+  }
+
+  getGameObjectForInstance(modelUrl, instanceId) {
+    return this._goLookup.get(`${modelUrl}#${instanceId}`) ?? null;
   }
 
   setMatrix(reg, matrix) {

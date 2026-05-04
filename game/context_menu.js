@@ -92,12 +92,28 @@ export class ContextMenu {
     }
 
     const hit = this._raycaster.intersectObjects(meshes, false)[0];
-    if (!hit) return null;
+    if (hit) {
+      let obj = hit.object;
+      while (obj && !obj.userData?._ctxGO) obj = obj.parent;
+      if (obj) return { go: obj.userData._ctxGO };
+    }
 
-    let obj = hit.object;
-    while (obj && !obj.userData?._ctxGO) obj = obj.parent;
-    if (!obj) return null;
-    return { go: obj.userData._ctxGO };
+    // Fallback: instanced buildings have no mesh in go.object3D — raycast against
+    // the InstancedMesh objects managed by BuildingInstanceManager directly.
+    const instMgr = this._game.buildingInstances;
+    if (instMgr) {
+      const instMeshes = instMgr.getInstancedMeshObjects();
+      const instHit = this._raycaster.intersectObjects(instMeshes, false)[0];
+      if (instHit) {
+        const go = instMgr.getGameObjectForInstance(
+          instHit.object.userData._ibModelUrl,
+          instHit.instanceId,
+        );
+        if (go) return { go };
+      }
+    }
+
+    return null;
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────

@@ -113,6 +113,10 @@ export class InstancedMeshGroup {
     for (const { inst } of this._meshes) inst.count = high;
   }
 
+  getMeshObjects() {
+    return this._meshes.map(m => m.inst);
+  }
+
   dispose() {
     for (const { inst } of this._meshes) {
       inst.dispose?.();
