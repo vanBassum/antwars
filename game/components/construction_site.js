@@ -43,7 +43,7 @@ export class ConstructionSite extends Component {
     const mgr = this.gameObject.game?.ghostInstances;
     if (mgr && this._modelUrl) {
       this._syncMatrix();
-      this._ghostReg = mgr.register(this._modelUrl, _mat4);
+      this._ghostReg = mgr.register(this._modelUrl, _mat4, this.gameObject);
     }
 
     // Wake any worker mid-cycle so they re-evaluate immediately instead of

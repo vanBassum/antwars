@@ -2,6 +2,7 @@ import { ResourceNode } from './components/resource_node.js';
 import { FarmPlot } from './components/farm_plot.js';
 import { EggPickup } from './components/egg_pickup.js';
 import { TrainingHut } from './components/training_hut.js';
+import { Barracks } from './components/barracks.js';
 import { FeedingTray } from './components/feeding_tray.js';
 import { ConstructionSite } from './components/construction_site.js';
 
@@ -103,7 +104,7 @@ export class WorkManager {
     if (hutWithRequest) {
       let totalRequests = 0;
       for (const go of this._trainingHuts) {
-        const th = go.getComponent(TrainingHut);
+        const th = go.getComponent(TrainingHut) ?? go.getComponent(Barracks);
         if (th) totalRequests += th.queueLength;
       }
       let inFlightEggs = 0;
@@ -303,7 +304,7 @@ export class WorkManager {
       if (go.getComponent(ResourceNode))     this._resourceNodes.push(go);
       if (go.getComponent(FarmPlot))         this._farmPlots.push(go);
       if (go.getComponent(EggPickup))        this._looseEggs.push(go);
-      if (go.getComponent(TrainingHut))      this._trainingHuts.push(go);
+      if (go.getComponent(TrainingHut) || go.getComponent(Barracks)) this._trainingHuts.push(go);
       if (go.getComponent(FeedingTray))      this._feedingTrays.push(go);
       if (go.getComponent(ConstructionSite)) this._constructionSites.push(go);
     }
@@ -357,7 +358,7 @@ export class WorkManager {
     av.egg = false;
     if (this._looseEggs.length > 0) {
       for (const go of this._trainingHuts) {
-        const th = go.getComponent(TrainingHut);
+        const th = go.getComponent(TrainingHut) ?? go.getComponent(Barracks);
         if (th && th.hasPendingRequest()) { av.egg = true; break; }
       }
     }
@@ -429,7 +430,7 @@ export class WorkManager {
   _nearestTrainingHut(from) {
     let best = null, bestD = Infinity;
     for (const go of this._trainingHuts) {
-      const th = go.getComponent(TrainingHut);
+      const th = go.getComponent(TrainingHut) ?? go.getComponent(Barracks);
       if (!th || !th.hasPendingRequest()) continue;
       const d = this._dist2(from, go);
       if (d < bestD) { best = go; bestD = d; }

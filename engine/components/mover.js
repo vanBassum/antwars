@@ -1,6 +1,7 @@
 import { Component } from '../gameobject.js';
 
-const ARRIVE_DIST = 0.05;
+const ARRIVE_DIST   = 0.05;
+const ARRIVE_SLOW_R = 0.8;  // start decelerating within this distance of the final waypoint
 
 export class Mover extends Component {
   static groundQuery = null; // set by game layer: Mover.groundQuery = heightAt
@@ -64,7 +65,10 @@ export class Mover extends Component {
       return;
     }
 
-    const step = Math.min(this.speed * dt, dist);
+    const speed = (this._path.length === 0 && dist < ARRIVE_SLOW_R)
+      ? this.speed * Math.max(dist / ARRIVE_SLOW_R, 0.15)
+      : this.speed;
+    const step = Math.min(speed * dt, dist);
     pos.x += (dx / dist) * step;
     pos.z += (dz / dist) * step;
     pos.y  = Mover.groundQuery ? Mover.groundQuery(pos.x, pos.z) : pos.y;

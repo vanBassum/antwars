@@ -62,7 +62,7 @@ export class GameObject {
     for (const c of this.components) c.start();
   }
 
-  update(dt) {
+  update(dt, rawDt = dt) {
     if (Component.profileEnabled) {
       const profile = Component._profile;
       for (const c of this.components) {
@@ -74,13 +74,13 @@ export class GameObject {
           profile.set(name, entry);
         }
         const t0 = performance.now();
-        c.update(dt);
+        c.update(dt, rawDt);
         entry.ms += performance.now() - t0;
         entry.count++;
       }
     } else {
       for (const c of this.components) {
-        if (c.enabled) c.update(dt);
+        if (c.enabled) c.update(dt, rawDt);
       }
     }
   }

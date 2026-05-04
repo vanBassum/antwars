@@ -301,16 +301,6 @@ export class Worker extends Component {
       this._abandonCycle();
     }
 
-    // Idle wander when GOAP has nothing to execute.
-    if (agent._currentAction) { this._wanderTimer = null; return; }
-    const mover = this.gameObject.getComponent(Mover);
-    if (!mover.arrived) return;
-    if (this._wanderTimer === null) this._wanderTimer = 1.5 + Math.random() * 1.5;
-    this._wanderTimer -= dt;
-    if (this._wanderTimer <= 0) {
-      this._pickWanderTarget();
-      this._wanderTimer = null;
-    }
   }
 
   // Called by WorkManager when a player-driven task is queued. If this

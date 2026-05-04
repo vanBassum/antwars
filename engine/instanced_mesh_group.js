@@ -65,6 +65,10 @@ export class InstancedMeshGroup {
     let id;
     if (this._free.length) {
       id = this._free.pop();
+      // Reusing a freed slot that may be below the current high-water mark.
+      // _refreshCount starts its scan from _highWater, so we must extend it
+      // to cover the reused slot or count stays 0 and the instance is invisible.
+      if (id >= this._highWater) this._highWater = id + 1;
     } else {
       if (this._highWater >= this.capacity) {
         throw new Error(`InstancedMeshGroup(${this.url}): capacity ${this.capacity} exceeded`);
@@ -110,7 +114,19 @@ export class InstancedMeshGroup {
     let high = this._highWater;
     while (high > 0 && !this._slotInUse[high - 1]) high--;
     this._highWater = high;
-    for (const { inst } of this._meshes) inst.count = high;
+    for (const { inst } of this._meshes) {
+      inst.count = high;
+      // Invalidate the cached bounding sphere so raycasting re-envelops all
+      // active instances next time intersectObjects is called. Without this,
+      // adding a second building leaves the sphere covering only the first one,
+      // and THREE.js early-exits the per-instance loop for any ray that misses
+      // the stale sphere.
+      inst.boundingSphere = null;
+    }
+  }
+
+  getMeshObjects() {
+    return this._meshes.map(m => m.inst);
   }
 
   dispose() {

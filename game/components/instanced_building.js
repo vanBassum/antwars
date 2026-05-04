@@ -18,7 +18,7 @@ export class InstancedBuilding extends Component {
     const mgr = this.gameObject.game?.buildingInstances;
     if (!mgr) return;
     this._syncMatrix();
-    this._reg = mgr.register(this._url, _mat4);
+    this._reg = mgr.register(this._url, _mat4, this.gameObject);
   }
 
   destroy() {

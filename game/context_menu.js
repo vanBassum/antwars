@@ -92,12 +92,38 @@ export class ContextMenu {
     }
 
     const hit = this._raycaster.intersectObjects(meshes, false)[0];
-    if (!hit) return null;
+    if (hit) {
+      let obj = hit.object;
+      while (obj && !obj.userData?._ctxGO) obj = obj.parent;
+      if (obj) return { go: obj.userData._ctxGO };
+    }
 
-    let obj = hit.object;
-    while (obj && !obj.userData?._ctxGO) obj = obj.parent;
-    if (!obj) return null;
-    return { go: obj.userData._ctxGO };
+    // Fallback: instanced buildings (completed) and construction ghosts have no
+    // mesh in go.object3D — raycast against their InstancedMesh objects directly,
+    // then find the nearest game object with a context menu to the hit point.
+    const instMgr  = this._game.buildingInstances;
+    const ghostMgr = this._game.ghostInstances;
+    const allInstMeshes = [
+      ...(instMgr?.getInstancedMeshObjects()  ?? []),
+      ...(ghostMgr?.getInstancedMeshObjects() ?? []),
+    ];
+    if (allInstMeshes.length) {
+      const instHit = this._raycaster.intersectObjects(allInstMeshes, false)[0];
+      if (instHit) {
+        const pt = instHit.point;
+        let bestGo = null, bestDist = 4.0;
+        for (const go of this._game.gameObjects) {
+          if (!go.components.some(c => typeof c.getContextMenu === 'function')) continue;
+          const p  = go.object3D.position;
+          const dx = p.x - pt.x, dz = p.z - pt.z;
+          const d  = dx * dx + dz * dz;
+          if (d < bestDist) { bestDist = d; bestGo = go; }
+        }
+        if (bestGo) return { go: bestGo };
+      }
+    }
+
+    return null;
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────

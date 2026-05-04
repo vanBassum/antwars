@@ -5,11 +5,13 @@ import { smoothPath } from '../../engine/hex/smooth_path.js';
 import { ENTITY_DEFS } from '../entities.js';
 import { FeedingTray } from './feeding_tray.js';
 
-const WANDER_RADIUS = 5;
-const EGG_MIN = 15;
-const EGG_MAX = 25;
+const WANDER_RADIUS  = 5;
+const EGG_MIN        = 15;
+const EGG_MAX        = 25;
 const SUGAR_COST_PER_EGG = 5;
-const DRINK_DURATION = 2; // seconds the Queen pauses at a tray
+const DRINK_DURATION = 2;   // seconds paused at tray
+const FLEE_RADIUS    = 12;  // enemy closer than this → flee
+const SAFE_RADIUS    = 15;  // enemy farther than this → resume normal life
 
 function randRange(min, max) { return min + Math.random() * (max - min); }
 
@@ -19,34 +21,48 @@ export class Queen extends Component {
     const grid = game.hexGrid;
     const hive = game.gameObjects.find(g => g.name === 'Ant Hill');
 
-    this._hiveHex = hive && grid ? grid.worldToHex(hive.position.x, hive.position.z) : null;
+    this._hiveHex     = hive && grid ? grid.worldToHex(hive.position.x, hive.position.z) : null;
     this._wanderTimer = 1.5 + Math.random() * 1.5;
-    this._eggTimer = randRange(EGG_MIN, EGG_MAX);
+    this._eggTimer    = randRange(EGG_MIN, EGG_MAX);
     this.internalSugar = 0;
 
-    // Drinking state
-    this._drinking      = false;   // true while paused at a tray
-    this._drinkTimer    = 0;
-    this._drinkTarget   = null;    // FeedingTray-bearing gameObject
+    this._drinking    = false;
+    this._drinkTimer  = 0;
+    this._drinkTarget = null;
+
+    this._fleeing     = false;
   }
 
   update(dt) {
     const mover = this.gameObject.getComponent(Mover);
     if (!mover) return;
 
-    // ── Drinking ────��───────────────────────────────────────────────────
+    // ── Enemy proximity check ───────────────────────────────────────────
+    const enemyDist = this._nearestEnemyDist();
+
+    if (!this._fleeing && enemyDist < FLEE_RADIUS) {
+      this._fleeing     = true;
+      this._drinking    = false;
+      this._drinkTarget = null;
+      this._fleeToHive(mover);
+    } else if (this._fleeing && enemyDist > SAFE_RADIUS) {
+      this._fleeing = false;
+    }
+
+    if (this._fleeing) {
+      if (mover.arrived) this._fleeToHive(mover);
+      return; // skip wander, drinking, and egg laying while fleeing
+    }
+
+    // ── Drinking ────────────────────────────────────────────────────────
     if (this._drinking) {
       this._drinkTimer -= dt;
-      if (this._drinkTimer <= 0) {
-        this._finishDrinking();
-      }
-      // Don't wander or lay while drinking.
+      if (this._drinkTimer <= 0) this._finishDrinking();
       return;
     }
 
-    // ── Wander / seek tray ──────────���───────────────────────────────────
+    // ── Wander / seek tray ──────────────────────────────────────────────
     if (mover.arrived) {
-      // If we just arrived at a tray target, start drinking.
       if (this._drinkTarget && this._isAtTray()) {
         this._startDrinking();
         return;
@@ -54,7 +70,6 @@ export class Queen extends Component {
 
       this._wanderTimer -= dt;
       if (this._wanderTimer <= 0) {
-        // Override wander target with nearest tray if hungry.
         if (this.internalSugar < SUGAR_COST_PER_EGG && this._seekTray()) {
           this._wanderTimer = 1.5 + Math.random() * 1.5;
         } else {
@@ -65,7 +80,7 @@ export class Queen extends Component {
       }
     }
 
-    // ── Lay egg ──────���────────────────────────────────────────��─────────
+    // ── Lay egg ─────────────────────────────────────────────────────────
     this._eggTimer -= dt;
     if (this._eggTimer <= 0) {
       const wm = this.gameObject.game.workManager;
@@ -74,19 +89,47 @@ export class Queen extends Component {
           this._layEgg();
           this.internalSugar -= SUGAR_COST_PER_EGG;
         }
-        // If not enough sugar, timer simply re-arms without laying.
       }
       this._eggTimer = randRange(EGG_MIN, EGG_MAX);
     }
   }
 
-  // ── Tray seeking ───────────────��────────────────────────────────────────
+  // ── Enemy detection ──────────────────────────────────────────────────
+  _nearestEnemyDist() {
+    const pos = this.gameObject.position;
+    let best = Infinity;
+    for (const go of this.gameObject.game.gameObjects) {
+      if (go.faction !== 'enemy') continue;
+      const dx = go.position.x - pos.x;
+      const dz = go.position.z - pos.z;
+      const d  = Math.sqrt(dx * dx + dz * dz);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  // ── Flee ─────────────────────────────────────────────────────────────
+  _fleeToHive(mover) {
+    const game = this.gameObject.game;
+    const grid = game.hexGrid;
+    if (!grid || !this._hiveHex) return;
+
+    const pos      = this.gameObject.position;
+    const from     = grid.worldToHex(pos.x, pos.z);
+    const approach = grid.findApproachHex(this._hiveHex.q, this._hiveHex.r, from.q, from.r);
+    if (!approach) return;
+
+    const path = grid.findPath(from.q, from.r, approach.q, approach.r);
+    if (!path || path.length < 2) return; // already at hive
+    mover.moveAlong(smoothPath(grid, pos, path));
+  }
+
+  // ── Tray seeking ─────────────────────────────────────────────────────
   _seekTray() {
     const game = this.gameObject.game;
     const grid = game.hexGrid;
     if (!grid) return false;
 
-    // Find nearest tray with level > 0.
     let bestGO = null, bestDist = Infinity;
     for (const go of game.gameObjects) {
       const ft = go.getComponent(FeedingTray);
@@ -98,10 +141,9 @@ export class Queen extends Component {
     }
     if (!bestGO) return false;
 
-    // Path to the tray's approach hex.
-    const pos  = this.gameObject.position;
-    const from = grid.worldToHex(pos.x, pos.z);
-    const tHex = grid.worldToHex(bestGO.position.x, bestGO.position.z);
+    const pos      = this.gameObject.position;
+    const from     = grid.worldToHex(pos.x, pos.z);
+    const tHex     = grid.worldToHex(bestGO.position.x, bestGO.position.z);
     const approach = grid.findApproachHex(tHex.q, tHex.r, from.q, from.r);
     if (!approach) return false;
 
@@ -113,11 +155,7 @@ export class Queen extends Component {
     return true;
   }
 
-  _isAtTray() {
-    // When _drinkTarget is set, _seekTray pathed us to the tray's approach
-    // hex, so mover.arrived means we're standing next to it.
-    return !!this._drinkTarget;
-  }
+  _isAtTray() { return !!this._drinkTarget; }
 
   _startDrinking() {
     this._drinking   = true;
@@ -128,20 +166,18 @@ export class Queen extends Component {
     this._drinking = false;
     if (this._drinkTarget) {
       const ft = this._drinkTarget.getComponent(FeedingTray);
-      if (ft && ft.drink()) {
-        this.internalSugar++;
-      }
+      if (ft && ft.drink()) this.internalSugar++;
     }
     this._drinkTarget = null;
   }
 
-  // ── Wander ────────────��───────────────────────��─────────────────────────
+  // ── Wander ───────────────────────────────────────────────────────────
   _pickWanderTarget() {
     const game = this.gameObject.game;
     const grid = game.hexGrid;
     if (!grid || !this._hiveHex) return;
 
-    const hiveHex = this._hiveHex;
+    const hiveHex    = this._hiveHex;
     const candidates = [];
     for (let q = hiveHex.q - WANDER_RADIUS; q <= hiveHex.q + WANDER_RADIUS; q++) {
       for (let r = hiveHex.r - WANDER_RADIUS; r <= hiveHex.r + WANDER_RADIUS; r++) {
@@ -153,15 +189,15 @@ export class Queen extends Component {
     if (candidates.length === 0) return;
 
     const target = candidates[Math.floor(Math.random() * candidates.length)];
-    const pos  = this.gameObject.position;
-    const from = grid.worldToHex(pos.x, pos.z);
-    const path = grid.findPath(from.q, from.r, target.q, target.r);
+    const pos    = this.gameObject.position;
+    const from   = grid.worldToHex(pos.x, pos.z);
+    const path   = grid.findPath(from.q, from.r, target.q, target.r);
     if (!path || path.length < 2) return;
 
     this.gameObject.getComponent(Mover).moveAlong(smoothPath(grid, pos, path));
   }
 
-  // ── Egg laying ──────────────────────��───────────────────────────────────
+  // ── Egg laying ───────────────────────────────────────────────────────
   _layEgg() {
     const game = this.gameObject.game;
     const def  = ENTITY_DEFS.find(d => d.id === 'egg');
@@ -175,12 +211,13 @@ export class Queen extends Component {
   getDebugInfo() {
     const mover = this.gameObject.getComponent(Mover);
     let task = 'idle';
-    if (this._drinking) task = 'drinking';
+    if (this._fleeing)       task = 'FLEEING';
+    else if (this._drinking) task = 'drinking';
     else if (this._drinkTarget) task = 'seeking tray';
     else if (mover && !mover.arrived) task = 'wander';
     return {
       task,
-      nextEgg: this._eggTimer?.toFixed(1) ?? '?',
+      nextEgg:       this._eggTimer?.toFixed(1) ?? '?',
       internalSugar: this.internalSugar,
     };
   }

@@ -17,13 +17,15 @@ export class PlacementController {
     this._raycaster  = new THREE.Raycaster();
     this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
-    this._onMouseMove = this._onMouseMove.bind(this);
-    this._onMouseDown = this._onMouseDown.bind(this);
-    this._onKeyDown   = this._onKeyDown.bind(this);
+    this._onMouseMove   = this._onMouseMove.bind(this);
+    this._onMouseDown   = this._onMouseDown.bind(this);
+    this._onKeyDown     = this._onKeyDown.bind(this);
+    this._onContextMenu = this._onContextMenu.bind(this);
 
     const canvas = game.renderer.domElement;
     canvas.addEventListener('mousemove', this._onMouseMove);
     canvas.addEventListener('mousedown', this._onMouseDown);
+    canvas.addEventListener('contextmenu', this._onContextMenu);
     window.addEventListener('keydown', this._onKeyDown);
   }
 
@@ -85,8 +87,16 @@ export class PlacementController {
     this._setGhostTint(valid);
   }
 
+  _onContextMenu(e) {
+    if (!this._active) return;
+    e.preventDefault();
+    this._cancel();
+  }
+
   _onMouseDown(e) {
-    if (!this._active || e.button !== 0) return;
+    if (!this._active) return;
+    if (e.button === 2) { e.preventDefault(); this._cancel(); return; }
+    if (e.button !== 0) return;
     const hex = this._raycastToHex(e);
     if (!hex) return;
     const grid = this._game.hexGrid;

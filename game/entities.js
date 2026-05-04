@@ -10,10 +10,16 @@ import { FarmPlot } from './components/farm_plot.js';
 import { Queen } from './components/queen.js';
 import { EggPickup } from './components/egg_pickup.js';
 import { TrainingHut } from './components/training_hut.js';
+import { Barracks } from './components/barracks.js';
 import { FeedingTray } from './components/feeding_tray.js';
 import { Building } from './components/building.js';
 import { ConstructionSite } from './components/construction_site.js';
 import { InstancedBuilding } from './components/instanced_building.js';
+import { Ladybug } from './components/ladybug.js';
+import { SoldierAnt } from './components/soldier_ant.js';
+import { Health } from '../engine/components/health.js';
+import { CombatAnimator } from '../engine/components/combat_animator.js';
+import { Selectable } from './components/selectable.js';
 
 // Helper for player-placed buildings: spawn in CONSTRUCTING state with a
 // translucent ghost overlay, deferring the gameplay component until workers
@@ -35,15 +41,6 @@ function attachConstruction(go, def, addGameplay) {
 }
 
 export const ENTITY_DEFS = [
-  new EntityDef({
-    id: 'watchtower', name: 'Watchtower', icon: '🗼', iconUrl: 'assets/icons/WatchTower.png', yOffset: 0, occupiesHex: true,
-    modelUrl: 'assets/models/WatchTower.glb',
-    createObject() {
-      const go = new GameObject('Watchtower');
-      go.object3D.add(cloneModel(this.modelUrl));
-      return go;
-    },
-  }),
   new EntityDef({
     id: 'anthill', name: 'Ant Hill', icon: '🐜', iconUrl: 'assets/icons/AntHill.png', yOffset: 0, occupiesHex: true,
     entrance: [0, 1], // south neighbor — ants enter/leave through the bottom
@@ -100,9 +97,13 @@ export const ENTITY_DEFS = [
     modelUrl: 'assets/models/Ant.glb',
     createObject(game) {
       const go = new GameObject('Ant');
-      go.addComponent(new Mover(1.5));
+      go.addComponent(new Mover(3));
       go.addComponent(new GOAPAgent());
       go.addComponent(new Worker());
+      go.addComponent(new Health({ hp: 2, onDeath: (g) => g.game.remove(g),
+        onHit: (_, g) => g.getComponent(CombatAnimator)?.playHit() }));
+      go.addComponent(new CombatAnimator());
+
       if (game?.antInstances) go.addComponent(new InstancedRenderer(game.antInstances));
       return go;
     },
@@ -114,6 +115,12 @@ export const ENTITY_DEFS = [
       const go = new GameObject('Queen');
       go.addComponent(new Mover(1.0));
       go.addComponent(new Queen());
+      go.addComponent(new Health({ hp: 10, onDeath: (g) => {
+        g.game.remove(g);
+        g.game.triggerGameOver?.();
+      }, onHit: (_, g) => g.getComponent(CombatAnimator)?.playHit() }));
+      go.addComponent(new CombatAnimator());
+
       if (game?.queenInstances) go.addComponent(new InstancedRenderer(game.queenInstances));
       return go;
     },
@@ -147,6 +154,57 @@ export const ENTITY_DEFS = [
         return g.addComponent(new TrainingHut());
       });
       go.addComponent(new Building(this));
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'barracks', name: 'Barracks', icon: '⚔️', iconUrl: 'assets/icons/Barracks.png', yOffset: 0, occupiesHex: true,
+    entrance: [0, 1],
+    modelUrl: 'assets/models/Barracks.glb',
+    constructionCost: { wood: 10 },
+    createObject() {
+      const go = new GameObject('Barracks');
+      go.object3D.add(cloneModel(this.modelUrl));
+      const modelUrl = this.modelUrl;
+      attachConstruction(go, this, (g) => {
+        g.object3D.add(cloneModel(modelUrl));
+        return g.addComponent(new Barracks());
+      });
+      go.addComponent(new Building(this));
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'soldier_ant', name: 'Soldier Ant', icon: '⚔️',
+    modelUrl: 'assets/models/SoldierAnt.glb',
+    createObject(game) {
+      const go = new GameObject('Soldier Ant');
+      go.addComponent(new Mover(1.3));
+      go.addComponent(new SoldierAnt());
+      go.addComponent(new Health({ hp: 4, onDeath: (g) => g.game.remove(g),
+        onHit: (_, g) => g.getComponent(CombatAnimator)?.playHit() }));
+      go.addComponent(new CombatAnimator());
+      go.addComponent(new Selectable());
+
+      if (game?.soldierAntInstances) go.addComponent(new InstancedRenderer(game.soldierAntInstances));
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'ladybug', name: 'Ladybug', icon: '🐞',
+    modelUrl: 'assets/models/Ladybug.glb',
+    createObject(game) {
+      const go = new GameObject('Ladybug');
+      go.faction = 'enemy';
+      const model = cloneModel(this.modelUrl);
+      model.scale.setScalar(0.4);
+      go.object3D.add(model);
+      go.addComponent(new Mover(0.8));
+      go.addComponent(new Ladybug());
+      go.addComponent(new Health({ hp: 8, onDeath: (g) => g.game.remove(g),
+        onHit: (_, g) => g.getComponent(CombatAnimator)?.playHit() }));
+      go.addComponent(new CombatAnimator());
+
       return go;
     },
   }),

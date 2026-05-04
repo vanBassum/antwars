@@ -19,8 +19,11 @@ import { DebugMode } from './debug.js';
 import { DebugOverlay } from './debug_overlay.js';
 import { PerfOverlay } from './perf_overlay.js';
 import { SpeedControls } from './speed_controls.js';
+import { SelectionManager } from './selection_manager.js';
 import { BuildingInstanceManager } from './building_instance_manager.js';
 import { GhostInstanceManager } from './ghost_instance_manager.js';
+import { SoldierFormation } from './soldier_formation.js';
+import { WaveManager } from './wave_manager.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -93,15 +96,19 @@ await Promise.all([
   loadModel('assets/models/Egg.glb'),
   loadModel('assets/models/FeedingTray.glb'),
   loadModel('assets/models/HoneyBlob.glb'),
+  loadModel('assets/models/Barracks.glb'),
 ]);
 
 // Instanced pools for ants and queen — shared across all entities of each type.
-const antInstances   = new InstancedMeshGroup('assets/models/Ant.glb',   { capacity: 1024, scale: 0.25 });
-const queenInstances = new InstancedMeshGroup('assets/models/Queen.glb', { capacity: 4,    scale: 0.4  });
+const antInstances        = new InstancedMeshGroup('assets/models/Ant.glb',        { capacity: 1024, scale: 0.25 });
+const queenInstances      = new InstancedMeshGroup('assets/models/Queen.glb',      { capacity: 4,    scale: 0.4  });
+const soldierAntInstances = new InstancedMeshGroup('assets/models/SoldierAnt.glb', { capacity: 512,  scale: 0.3  });
 game.scene.add(antInstances.object3D);
 game.scene.add(queenInstances.object3D);
-game.antInstances   = antInstances;
-game.queenInstances = queenInstances;
+game.scene.add(soldierAntInstances.object3D);
+game.antInstances        = antInstances;
+game.queenInstances      = queenInstances;
+game.soldierAntInstances = soldierAntInstances;
 
 // Crop instance pools (FarmPlot grows-into-instance flow).
 initCropInstances(game.scene, [
@@ -113,7 +120,8 @@ initCropInstances(game.scene, [
 const anthillFootprint = measureModelFootprint('assets/models/AntHill.glb');
 const hexSize = (anthillFootprint || 2) / Math.sqrt(3);
 const hexGrid = new HexGrid({ size: hexSize, radius: 16 });
-game.hexGrid  = hexGrid;
+game.hexGrid         = hexGrid;
+game.soldierFormation = new SoldierFormation(game);
 
 const hexGridGO = new GameObject('HexGrid');
 hexGridGO.addComponent(new HexGridRenderer(hexGrid));
@@ -137,7 +145,10 @@ const data = await res.json();
 if (data.resources) {
   for (const [key, value] of Object.entries(data.resources)) game.resources.set(key, value);
 }
+game.selectionManager = new SelectionManager(game);
+
 new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
+game.waveManager = new WaveManager(game);
 
 const placement = new PlacementController(game);
 game.placement   = placement;
@@ -146,13 +157,13 @@ new ContextMenu(game, { isBlocked: () => placement.active });
 // Per-frame debug labels above any gameObject exposing getDebugInfo().
 const debugOverlay = new DebugOverlay(game, game.debug);
 const perfOverlay  = new PerfOverlay(game, game.debug);
-game.onTick = () => { debugOverlay.tick(); perfOverlay.tick(); };
+game.onTick = (dt) => { game.waveManager.update(dt); debugOverlay.tick(); perfOverlay.tick(); };
 
 function startPlacement(defId, commit) {
   const def = ENTITY_DEFS.find(d => d.id === defId);
   if (!def) return;
-  actionBar.showCancel(() => placement.cancel());
-  placement.start(def, commit, () => actionBar.hideCancel());
+  actionBar.setPlacing(true);
+  placement.start(def, commit, () => actionBar.setPlacing(false));
 }
 
 // Worker ants are no longer spawned directly from the ActionBar — they come
@@ -187,6 +198,36 @@ const actionBar = new ActionBar(game.resources, [
     cost:      { wood: 5 },
     onActivate: () => startPlacement('feeding_tray', noDeductCommit),
   },
+  {
+    icon:      '⚔️',
+    iconUrl:   'assets/icons/Barracks.png',
+    label:     'Barracks',
+    costLabel: '10 🪵',
+    cost:      { wood: 10 },
+    onActivate: () => startPlacement('barracks', noDeductCommit),
+  },
 ]);
+
+game.triggerGameOver = () => {
+  game.timeScale = 0;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = [
+    'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.75)',
+    'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
+    'z-index:1000', 'color:#fff', 'font-family:sans-serif', 'gap:1rem',
+  ].join(';');
+  const title = document.createElement('div');
+  title.textContent = 'GAME OVER';
+  title.style.cssText = 'font-size:4rem;font-weight:bold;letter-spacing:0.1em;text-shadow:0 0 20px #f00';
+  const sub = document.createElement('div');
+  sub.textContent = 'The queen has been slain.';
+  sub.style.cssText = 'font-size:1.5rem;opacity:0.8';
+  const btn = document.createElement('button');
+  btn.textContent = 'Restart';
+  btn.style.cssText = 'margin-top:1rem;padding:0.6rem 2rem;font-size:1.2rem;cursor:pointer;border:none;border-radius:6px';
+  btn.addEventListener('click', () => location.reload());
+  overlay.append(title, sub, btn);
+  document.body.appendChild(overlay);
+};
 
 game.start();

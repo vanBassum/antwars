@@ -38,8 +38,12 @@ export class InstancedRenderer extends Component {
   }
 
   _updateMatrix() {
-    const pos = this.gameObject.position;
-    const yaw = this.gameObject.object3D.rotation.y;
-    composeYawMatrix(this._mat, pos.x, pos.y, pos.z, yaw);
+    const go    = this.gameObject;
+    const pos   = go.position;
+    const yaw   = go.object3D.rotation.y;
+    const scale = go.animScale   ?? 1;
+    const ox    = go.animOffsetX ?? 0;
+    const oz    = go.animOffsetZ ?? 0;
+    composeYawMatrix(this._mat, pos.x + ox, pos.y, pos.z + oz, yaw, scale);
   }
 }

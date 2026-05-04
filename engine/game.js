@@ -110,7 +110,7 @@ export class Game {
     if (Component.profileEnabled) Component.resetProfile();
 
     const t0 = performance.now();
-    for (const go of this.gameObjects) go.update(dt);
+    for (const go of this.gameObjects) go.update(dt, rawDt);
     const t1 = performance.now();
     this.onTick?.(dt);
     const t2 = performance.now();
