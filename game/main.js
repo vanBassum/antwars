@@ -94,6 +94,7 @@ await Promise.all([
   loadModel('assets/models/Egg.glb'),
   loadModel('assets/models/FeedingTray.glb'),
   loadModel('assets/models/HoneyBlob.glb'),
+  loadModel('assets/models/Barracks.glb'),
 ]);
 
 // Instanced pools for ants and queen — shared across all entities of each type.
@@ -192,6 +193,14 @@ const actionBar = new ActionBar(game.resources, [
     costLabel: '5 🪵',
     cost:      { wood: 5 },
     onActivate: () => startPlacement('feeding_tray', noDeductCommit),
+  },
+  {
+    icon:      '⚔️',
+    iconUrl:   'assets/icons/Barracks.png',
+    label:     'Barracks',
+    costLabel: '10 🪵',
+    cost:      { wood: 10 },
+    onActivate: () => startPlacement('barracks', noDeductCommit),
   },
 ]);
 

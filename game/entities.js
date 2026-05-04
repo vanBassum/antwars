@@ -10,6 +10,7 @@ import { FarmPlot } from './components/farm_plot.js';
 import { Queen } from './components/queen.js';
 import { EggPickup } from './components/egg_pickup.js';
 import { TrainingHut } from './components/training_hut.js';
+import { Barracks } from './components/barracks.js';
 import { FeedingTray } from './components/feeding_tray.js';
 import { Building } from './components/building.js';
 import { ConstructionSite } from './components/construction_site.js';
@@ -182,6 +183,23 @@ export const ENTITY_DEFS = [
       attachConstruction(go, this, (g) => {
         g.object3D.add(cloneModel(modelUrl));
         return g.addComponent(new TrainingHut());
+      });
+      go.addComponent(new Building(this));
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'barracks', name: 'Barracks', icon: '⚔️', iconUrl: 'assets/icons/Barracks.png', yOffset: 0, occupiesHex: true,
+    entrance: [0, 1],
+    modelUrl: 'assets/models/Barracks.glb',
+    constructionCost: { wood: 10 },
+    createObject() {
+      const go = new GameObject('Barracks');
+      go.object3D.add(cloneModel(this.modelUrl));
+      const modelUrl = this.modelUrl;
+      attachConstruction(go, this, (g) => {
+        g.object3D.add(cloneModel(modelUrl));
+        return g.addComponent(new Barracks());
       });
       go.addComponent(new Building(this));
       return go;
