@@ -98,15 +98,18 @@ export class ContextMenu {
       if (obj) return { go: obj.userData._ctxGO };
     }
 
-    // Fallback: instanced buildings have no mesh in go.object3D — raycast against
-    // the InstancedMesh objects managed by BuildingInstanceManager directly.
-    const instMgr = this._game.buildingInstances;
-    if (instMgr) {
-      const instMeshes = instMgr.getInstancedMeshObjects();
+    // Fallback: instanced buildings (completed) and construction ghosts have no
+    // mesh in go.object3D — raycast against their InstancedMesh objects directly.
+    const instMgr  = this._game.buildingInstances;
+    const ghostMgr = this._game.ghostInstances;
+    for (const [mgr, urlKey] of [[instMgr, '_ibModelUrl'], [ghostMgr, '_ghostModelUrl']]) {
+      if (!mgr) continue;
+      const instMeshes = mgr.getInstancedMeshObjects();
+      if (!instMeshes.length) continue;
       const instHit = this._raycaster.intersectObjects(instMeshes, false)[0];
       if (instHit) {
-        const go = instMgr.getGameObjectForInstance(
-          instHit.object.userData._ibModelUrl,
+        const go = mgr.getGameObjectForInstance(
+          instHit.object.userData[urlKey],
           instHit.instanceId,
         );
         if (go) return { go };

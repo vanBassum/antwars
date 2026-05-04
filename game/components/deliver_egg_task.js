@@ -1,5 +1,6 @@
 import { EggPickup } from './egg_pickup.js';
 import { TrainingHut } from './training_hut.js';
+import { Barracks } from './barracks.js';
 
 // What an ant is currently delivering an egg to. Pure data holder; the
 // WorkManager assigns the egg target and the training hut destination.
@@ -19,10 +20,10 @@ export class DeliverEggTask {
       if (!this.egg.game?.gameObjects.includes(this.egg)) return false;
       return !!this.egg.getComponent(EggPickup);
     }
-    // Post-pickup: the training hut must still exist and still want a worker.
+    // Post-pickup: the training hut/barracks must still exist and still want a worker.
     if (this.trainingHut) {
       if (!this.trainingHut.game?.gameObjects.includes(this.trainingHut)) return false;
-      const th = this.trainingHut.getComponent(TrainingHut);
+      const th = this.trainingHut.getComponent(TrainingHut) ?? this.trainingHut.getComponent(Barracks);
       return !!th && th.hasPendingRequest();
     }
     return false;
@@ -43,7 +44,7 @@ export class DeliverEggTask {
   // Deliver the egg to the training hut. Returns true on success.
   dropOff() {
     if (!this.trainingHut) return false;
-    const th = this.trainingHut.getComponent(TrainingHut);
+    const th = this.trainingHut.getComponent(TrainingHut) ?? this.trainingHut.getComponent(Barracks);
     if (!th) return false;
     return th.receiveEgg();
   }
