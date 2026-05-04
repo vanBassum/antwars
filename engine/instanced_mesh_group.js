@@ -114,7 +114,15 @@ export class InstancedMeshGroup {
     let high = this._highWater;
     while (high > 0 && !this._slotInUse[high - 1]) high--;
     this._highWater = high;
-    for (const { inst } of this._meshes) inst.count = high;
+    for (const { inst } of this._meshes) {
+      inst.count = high;
+      // Invalidate the cached bounding sphere so raycasting re-envelops all
+      // active instances next time intersectObjects is called. Without this,
+      // adding a second building leaves the sphere covering only the first one,
+      // and THREE.js early-exits the per-instance loop for any ray that misses
+      // the stale sphere.
+      inst.boundingSphere = null;
+    }
   }
 
   getMeshObjects() {
