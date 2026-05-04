@@ -62,7 +62,7 @@ export class WaveManager {
   _buildHud() {
     const el = document.createElement('div');
     el.style.cssText = [
-      'position:fixed', 'top:14px', 'left:50%', 'transform:translateX(-50%)',
+      'position:fixed', 'top:12px', 'left:12px',
       'background:rgba(0,0,0,0.55)', 'color:#fff',
       'font-family:sans-serif', 'font-size:0.8rem',
       'padding:4px 12px', 'border-radius:6px',
