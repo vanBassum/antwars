@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Component } from '../../engine/gameobject.js';
 
-const _geo = new THREE.SphereGeometry(0.18, 8, 6);
+const _geo = new THREE.SphereGeometry(0.09, 8, 6);
 const _mat = new THREE.MeshBasicMaterial({ color: 0x44ff44 });
 
 export class Selectable extends Component {

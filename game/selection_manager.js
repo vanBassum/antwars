@@ -7,7 +7,7 @@ const _plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _hit   = new THREE.Vector3();
 
 const DRAG_MIN     = 6;   // px before drag mode activates
-const SLOT_SPACING = 2.2; // world units between formation slots
+const SLOT_SPACING = 1.2; // world units between formation slots
 
 export class SelectionManager {
   constructor(game) {
