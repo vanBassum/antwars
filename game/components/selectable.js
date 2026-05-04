@@ -8,14 +8,21 @@ export class Selectable extends Component {
   start() {
     this._selected  = false;
     this._indicator = new THREE.Mesh(_geo, _mat);
-    this._indicator.position.y = 1.4;
-    this._indicator.visible    = false;
-    this.gameObject.object3D.add(this._indicator);
+    this._indicator.visible = false;
+    // Add directly to the scene — instanced units have no scene-graph object3D.
+    this.gameObject.game.scene.add(this._indicator);
 
     this.gameObject.game.selectionManager?.register(this);
   }
 
+  update() {
+    if (!this._selected) return;
+    const p = this.gameObject.position;
+    this._indicator.position.set(p.x, p.y + 1.4, p.z);
+  }
+
   destroy() {
+    this.gameObject.game.scene.remove(this._indicator);
     this.gameObject.game.selectionManager?.unregister(this);
   }
 
