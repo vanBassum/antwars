@@ -10,14 +10,28 @@ const REPATH_INTERVAL = 2.0;
 
 export class SoldierAnt extends Component {
   start() {
+    const game = this.gameObject.game;
     const pos  = this.gameObject.position;
-    const grid = this.gameObject.game.hexGrid;
+    const grid = game.hexGrid;
     this._postHex     = grid ? grid.worldToHex(pos.x, pos.z) : null;
     this._target      = null;
     this._attackTimer = 0;
     this._repathTimer = 0;
     this._angleJitter = (Math.random() - 0.5) * 0.6;
     this._commandPos  = null;
+
+    // Claim a formation slot and head straight there — avoids soldiers stacking
+    // at the barracks entrance when multiple are spawned in quick succession.
+    const formation = game.soldierFormation;
+    if (formation) {
+      formation.register(this.gameObject);
+      const slot = formation.getSlot(this.gameObject);
+      if (slot) this.commandMove(slot);
+    }
+  }
+
+  destroy() {
+    this.gameObject.game?.soldierFormation?.unregister(this.gameObject);
   }
 
   commandMove(pos) {
@@ -83,8 +97,13 @@ export class SoldierAnt extends Component {
     }
   }
 
-  _updateIdle(_dt, _mover, _game) {
-    // Hold position — no wandering.
+  _updateIdle(_dt, mover, game) {
+    const slot = game.soldierFormation?.getSlot(this.gameObject);
+    if (!slot) return;
+    const pos = this.gameObject.position;
+    const dx  = slot.x - pos.x, dz = slot.z - pos.z;
+    // Re-navigate to slot if the soldier drifted (e.g. after combat) and is idle.
+    if (dx * dx + dz * dz > 0.5 && mover.arrived) mover.moveTo(slot);
   }
 
 

@@ -22,6 +22,8 @@ import { SpeedControls } from './speed_controls.js';
 import { SelectionManager } from './selection_manager.js';
 import { BuildingInstanceManager } from './building_instance_manager.js';
 import { GhostInstanceManager } from './ghost_instance_manager.js';
+import { SoldierFormation } from './soldier_formation.js';
+import { WaveManager } from './wave_manager.js';
 
 const game = new Game();
 game.resources = new Resources();
@@ -118,7 +120,8 @@ initCropInstances(game.scene, [
 const anthillFootprint = measureModelFootprint('assets/models/AntHill.glb');
 const hexSize = (anthillFootprint || 2) / Math.sqrt(3);
 const hexGrid = new HexGrid({ size: hexSize, radius: 16 });
-game.hexGrid  = hexGrid;
+game.hexGrid         = hexGrid;
+game.soldierFormation = new SoldierFormation(game);
 
 const hexGridGO = new GameObject('HexGrid');
 hexGridGO.addComponent(new HexGridRenderer(hexGrid));
@@ -145,6 +148,7 @@ if (data.resources) {
 game.selectionManager = new SelectionManager(game);
 
 new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
+game.waveManager = new WaveManager(game);
 
 const placement = new PlacementController(game);
 game.placement   = placement;
@@ -153,7 +157,7 @@ new ContextMenu(game, { isBlocked: () => placement.active });
 // Per-frame debug labels above any gameObject exposing getDebugInfo().
 const debugOverlay = new DebugOverlay(game, game.debug);
 const perfOverlay  = new PerfOverlay(game, game.debug);
-game.onTick = () => { debugOverlay.tick(); perfOverlay.tick(); };
+game.onTick = (dt) => { game.waveManager.update(dt); debugOverlay.tick(); perfOverlay.tick(); };
 
 function startPlacement(defId, commit) {
   const def = ENTITY_DEFS.find(d => d.id === defId);

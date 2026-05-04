@@ -42,37 +42,6 @@ function attachConstruction(go, def, addGameplay) {
 
 export const ENTITY_DEFS = [
   new EntityDef({
-    id: 'palisade', name: 'Palisade', icon: '🪵',
-    modelUrl: 'assets/models/Palisade.glb',
-    yOffset: 0, occupiesHex: true,
-    createObject() {
-      const go = new GameObject('Palisade');
-      go.object3D.add(cloneModel(this.modelUrl));
-      go.addComponent(new Health({ hp: 8,
-        onHit:  (_, g) => g.getComponent(CombatAnimator)?.playHit(),
-        onDeath: (g) => {
-          const grid = g.game.hexGrid;
-          if (grid) {
-            const hex = grid.worldToHex(g.position.x, g.position.z);
-            grid.free(hex.q, hex.r);
-          }
-          g.game.remove(g);
-        },
-      }));
-      go.addComponent(new CombatAnimator());
-      return go;
-    },
-  }),
-  new EntityDef({
-    id: 'watchtower', name: 'Watchtower', icon: '🗼', iconUrl: 'assets/icons/WatchTower.png', yOffset: 0, occupiesHex: true,
-    modelUrl: 'assets/models/WatchTower.glb',
-    createObject() {
-      const go = new GameObject('Watchtower');
-      go.object3D.add(cloneModel(this.modelUrl));
-      return go;
-    },
-  }),
-  new EntityDef({
     id: 'anthill', name: 'Ant Hill', icon: '🐜', iconUrl: 'assets/icons/AntHill.png', yOffset: 0, occupiesHex: true,
     entrance: [0, 1], // south neighbor — ants enter/leave through the bottom
     modelUrl: 'assets/models/AntHill.glb',
