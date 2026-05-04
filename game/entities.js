@@ -18,6 +18,7 @@ import { Ladybug } from './components/ladybug.js';
 import { SoldierAnt } from './components/soldier_ant.js';
 import { Health } from '../engine/components/health.js';
 import { CombatAnimator } from '../engine/components/combat_animator.js';
+import { Selectable } from './components/selectable.js';
 
 // Helper for player-placed buildings: spawn in CONSTRUCTING state with a
 // translucent ghost overlay, deferring the gameplay component until workers
@@ -196,6 +197,7 @@ export const ENTITY_DEFS = [
       go.addComponent(new Health({ hp: 4, onDeath: (g) => g.game.remove(g),
         onHit: (_, g) => g.getComponent(CombatAnimator)?.playHit() }));
       go.addComponent(new CombatAnimator());
+      go.addComponent(new Selectable());
 
       if (game?.soldierAntInstances) go.addComponent(new InstancedRenderer(game.soldierAntInstances));
       return go;

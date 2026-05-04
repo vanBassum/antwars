@@ -21,6 +21,12 @@ export class SoldierAnt extends Component {
     this._repathTimer = 0;
     this._wanderTimer = Math.random() * 2;
     this._angleJitter = (Math.random() - 0.5) * 0.6;
+    this._commandPos  = null;
+  }
+
+  commandMove(pos) {
+    this._commandPos = { x: pos.x, z: pos.z };
+    this.gameObject.getComponent(Mover)?.moveTo(this._commandPos);
   }
 
   update(dt) {
@@ -35,6 +41,19 @@ export class SoldierAnt extends Component {
     if (!this._target) {
       const n = this._nearestEnemy(game);
       if (n && n.dist < AGGRO_RANGE) this._target = n.go;
+    }
+
+    // Manual move command: suspend AI until arrived, but combat overrides it.
+    if (this._commandPos) {
+      if (this._target) {
+        this._commandPos = null; // enemy nearby — fight first
+      } else if (mover.arrived) {
+        const pos = this.gameObject.position;
+        if (game.hexGrid) this._postHex = game.hexGrid.worldToHex(pos.x, pos.z);
+        this._commandPos = null;
+      } else {
+        return;
+      }
     }
 
     if (this._target) {

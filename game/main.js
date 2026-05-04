@@ -19,6 +19,7 @@ import { DebugMode } from './debug.js';
 import { DebugOverlay } from './debug_overlay.js';
 import { PerfOverlay } from './perf_overlay.js';
 import { SpeedControls } from './speed_controls.js';
+import { SelectionManager } from './selection_manager.js';
 import { BuildingInstanceManager } from './building_instance_manager.js';
 import { GhostInstanceManager } from './ghost_instance_manager.js';
 
@@ -141,6 +142,8 @@ if (data.resources) {
   for (const [key, value] of Object.entries(data.resources)) game.resources.set(key, value);
 }
 new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
+
+game.selectionManager = new SelectionManager(game);
 
 const placement = new PlacementController(game);
 game.placement   = placement;
