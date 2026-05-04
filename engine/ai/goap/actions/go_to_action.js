@@ -1,6 +1,14 @@
 import { Action } from '../action.js';
+import { Component } from '../../../gameobject.js';
 import { Mover } from '../../../components/mover.js';
 import { smoothPath } from '../../../hex/smooth_path.js';
+
+function bump(name, ms) {
+  if (!Component.profileEnabled) return;
+  let e = Component._profile.get(name);
+  if (!e) Component._profile.set(name, e = { ms: 0, count: 0 });
+  e.ms += ms; e.count += 1;
+}
 
 // Watchdog: if the ant hasn't moved meaningfully for this many seconds while
 // the action is still "in progress", fail the trip so the planner re-picks.
@@ -42,7 +50,9 @@ export class GoToAction extends Action {
     this._lastZ  = agent.gameObject.position.z;
     this._unsubOccupancy = null;
     this._hexPathKeys    = null;
+    let t0 = performance.now();
     const target = this._getTarget();
+    bump('GOAP·enter·getTarget', performance.now() - t0);
     const mover  = agent.gameObject.getComponent(Mover);
     if (!target) { this._fail(agent, mover); return; }
 
@@ -57,7 +67,9 @@ export class GoToAction extends Action {
     if (grid.getEntrance(to.q, to.r)) {
       goal = to;
     } else {
+      let t0 = performance.now();
       const approach = grid.findApproachHex(to.q, to.r, from.q, from.r);
+      bump('GOAP·enter·approach', performance.now() - t0);
       if (!approach) { this._fail(agent, mover); return; }
       goal = approach;
       const tWP = grid.hexToWorld(to.q, to.r);
@@ -65,9 +77,15 @@ export class GoToAction extends Action {
       edgeOverride = { x: (aWP.x + tWP.x) / 2, z: (aWP.z + tWP.z) / 2 };
     }
 
+    t0 = performance.now();
     const path = grid.findPath(from.q, from.r, goal.q, goal.r);
+    bump('GOAP·enter·findPath', performance.now() - t0);
     if (!path) { this._fail(agent, mover); return; }
+
+    t0 = performance.now();
     const waypoints = smoothPath(grid, ant.position, path, edgeOverride);
+    bump('GOAP·enter·smooth', performance.now() - t0);
+
     // Already at the goal hex — happens when wander or a previous trip left
     // the ant in the destination cell while worldState still says she's
     // elsewhere. Succeed immediately so the effect (location update) gets
@@ -76,15 +94,19 @@ export class GoToAction extends Action {
       mover.arrived = true;
       return;
     }
+    t0 = performance.now();
     mover.moveAlong(waypoints);
+    bump('GOAP·enter·moveAlong', performance.now() - t0);
 
     // Track hex cells along this path so we can invalidate if one becomes blocked.
+    t0 = performance.now();
     this._hexPathKeys = new Set(path.map(h => `${h.q},${h.r}`));
     this._unsubOccupancy = grid.onOccupancyChanged((q, r) => {
       if (this._hexPathKeys.has(`${q},${r}`)) {
         this._fail(agent, mover);
       }
     });
+    bump('GOAP·enter·subscribe', performance.now() - t0);
   }
 
   perform(agent, dt) {
@@ -121,7 +143,9 @@ export class GoToAction extends Action {
     this._unsubOccupancy?.();
     this._unsubOccupancy = null;
     mover.arrived = true;
+    const t0 = performance.now();
     this._onFailure?.();
+    bump('GOAP·onFailure', performance.now() - t0);
     agent.invalidate();
   }
 }

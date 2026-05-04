@@ -21,6 +21,11 @@ import { buildConstructActions, CONSTRUCT_GOAL } from '../cycles/deliver_materia
 
 const WANDER_RADIUS = 3;
 
+// No action can produce this effect, so the planner always fails when this is
+// the goal. That triggers onPlanFailed → 5-second retry timer, which keeps
+// idle ants off the enter-fail busy-loop and lets the wander logic run.
+const IDLE_GOAL = Object.freeze({ __idle: true });
+
 // Models the ant can visibly carry. Each entry:
 //   url      — model to clone
 //   baseX    — X rotation applied first (used to lay the branch flat)
@@ -165,7 +170,7 @@ export class Worker extends Component {
       this._egg.clear();
       this._restock.clear();
       this._construct.clear();
-      agent.goal = HARVEST_GOAL; // unreachable without resources — wander takes over
+      agent.goal = IDLE_GOAL;
       return;
     }
 
