@@ -1,7 +1,7 @@
 import { ENTITY_DEFS } from './entities.js';
 
-const FIRST_WAVE_DELAY = 30;   // seconds before the first wave arrives
-const WAVE_INTERVAL    = 60;   // seconds between subsequent waves
+const FIRST_WAVE_DELAY = 60;   // seconds before the first wave arrives
+const WAVE_INTERVAL    = 90;   // seconds between subsequent waves
 const BASE_COUNT       = 3;    // ladybugs in wave 1
 const COUNT_PER_WAVE   = 2;    // extra ladybugs added each successive wave
 
@@ -42,15 +42,12 @@ export class WaveManager {
     const grid = this._game.hexGrid;
     const R    = grid.radius;
 
-    // Walk the outer ring: start at (R, 0), 6 sides of length R each.
-    // Verified directions for flat-top axial coords (q, r):
-    const WALK = [[-1,1],[-1,0],[0,-1],[1,-1],[1,0],[0,1]];
+    // Use allHexes() and keep only those whose cube-coordinate max == R
+    // (the exact boundary ring). More reliable than a manual ring walk.
     const candidates = [];
-    let q = R, r = 0;
-    for (const [dq, dr] of WALK) {
-      for (let step = 0; step < R; step++) {
+    for (const { q, r } of grid.allHexes()) {
+      if (Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r)) === R) {
         candidates.push(grid.hexToWorld(q, r));
-        q += dq; r += dr;
       }
     }
 
@@ -59,17 +56,17 @@ export class WaveManager {
       const j = Math.floor(Math.random() * (i + 1));
       [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
     }
-    return candidates.slice(0, count);
+    return candidates.slice(0, Math.min(count, candidates.length));
   }
 
   _buildHud() {
     const el = document.createElement('div');
     el.style.cssText = [
-      'position:fixed', 'top:14px', 'right:14px',
+      'position:fixed', 'top:14px', 'left:50%', 'transform:translateX(-50%)',
       'background:rgba(0,0,0,0.55)', 'color:#fff',
       'font-family:sans-serif', 'font-size:0.8rem',
-      'padding:4px 10px', 'border-radius:6px',
-      'pointer-events:none', 'z-index:100',
+      'padding:4px 12px', 'border-radius:6px',
+      'pointer-events:none', 'z-index:100', 'white-space:nowrap',
     ].join(';');
     document.body.append(el);
     return el;
