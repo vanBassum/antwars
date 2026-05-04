@@ -96,12 +96,15 @@ await Promise.all([
 ]);
 
 // Instanced pools for ants and queen — shared across all entities of each type.
-const antInstances   = new InstancedMeshGroup('assets/models/Ant.glb',   { capacity: 1024, scale: 0.25 });
-const queenInstances = new InstancedMeshGroup('assets/models/Queen.glb', { capacity: 4,    scale: 0.4  });
+const antInstances        = new InstancedMeshGroup('assets/models/Ant.glb',        { capacity: 1024, scale: 0.25 });
+const queenInstances      = new InstancedMeshGroup('assets/models/Queen.glb',      { capacity: 4,    scale: 0.4  });
+const soldierAntInstances = new InstancedMeshGroup('assets/models/SoldierAnt.glb', { capacity: 512,  scale: 0.3  });
 game.scene.add(antInstances.object3D);
 game.scene.add(queenInstances.object3D);
-game.antInstances   = antInstances;
-game.queenInstances = queenInstances;
+game.scene.add(soldierAntInstances.object3D);
+game.antInstances        = antInstances;
+game.queenInstances      = queenInstances;
+game.soldierAntInstances = soldierAntInstances;
 
 // Crop instance pools (FarmPlot grows-into-instance flow).
 initCropInstances(game.scene, [
@@ -188,5 +191,27 @@ const actionBar = new ActionBar(game.resources, [
     onActivate: () => startPlacement('feeding_tray', noDeductCommit),
   },
 ]);
+
+game.triggerGameOver = () => {
+  game.timeScale = 0;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = [
+    'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.75)',
+    'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
+    'z-index:1000', 'color:#fff', 'font-family:sans-serif', 'gap:1rem',
+  ].join(';');
+  const title = document.createElement('div');
+  title.textContent = 'GAME OVER';
+  title.style.cssText = 'font-size:4rem;font-weight:bold;letter-spacing:0.1em;text-shadow:0 0 20px #f00';
+  const sub = document.createElement('div');
+  sub.textContent = 'The queen has been slain.';
+  sub.style.cssText = 'font-size:1.5rem;opacity:0.8';
+  const btn = document.createElement('button');
+  btn.textContent = 'Restart';
+  btn.style.cssText = 'margin-top:1rem;padding:0.6rem 2rem;font-size:1.2rem;cursor:pointer;border:none;border-radius:6px';
+  btn.addEventListener('click', () => location.reload());
+  overlay.append(title, sub, btn);
+  document.body.appendChild(overlay);
+};
 
 game.start();

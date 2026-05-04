@@ -140,7 +140,10 @@ export class HexGrid {
   }
 
   // ── A* pathfinding (returns array of {q, r} including start) ─────────────
-  findPath(sq, sr, gq, gr) {
+  // extraBlocked: optional Set of "q,r" keys for soft obstacles (e.g. other
+  // mobile units). These hexes are avoided except for the goal itself.
+  // Queries with extraBlocked bypass the cache to avoid stale results.
+  findPath(sq, sr, gq, gr, extraBlocked = null) {
     // Defensive escape clause: if the start lands on an occupied no-entrance
     // hex (happens when world-to-hex rounding lands on the building side of
     // an edge midpoint — e.g. an ant parked at the boundary between a sugar
@@ -156,24 +159,29 @@ export class HexGrid {
       if (escape) { sq = escape.q; sr = escape.r; }
     }
 
-    // Cache lookup. Path is stored as a flat string of "q,r;q,r;…" so we
-    // can store negative-result hits (null) explicitly without confusion.
-    // Returning a fresh array each call — callers read paths but the
-    // array reference shouldn't be shared across consumers.
-    const cacheKey = sq + ',' + sr + '|' + gq + ',' + gr;
-    const cached = this._pathCache.get(cacheKey);
-    if (cached !== undefined) return cached === null ? null : cached.map(p => ({ q: p.q, r: p.r }));
+    if (!extraBlocked) {
+      // Cache lookup. Path is stored as a flat string of "q,r;q,r;…" so we
+      // can store negative-result hits (null) explicitly without confusion.
+      // Returning a fresh array each call — callers read paths but the
+      // array reference shouldn't be shared across consumers.
+      const cacheKey = sq + ',' + sr + '|' + gq + ',' + gr;
+      const cached = this._pathCache.get(cacheKey);
+      if (cached !== undefined) return cached === null ? null : cached.map(p => ({ q: p.q, r: p.r }));
 
-    const path = this._findPathUncached(sq, sr, gq, gr);
+      const path = this._findPathUncached(sq, sr, gq, gr, null);
 
-    // Bounded cache. If we hit the cap, flush — paths are cheap to recompute
-    // and the next round of churn will re-warm the cache anyway.
-    if (this._pathCache.size >= this._pathCacheCap) this._pathCache.clear();
-    this._pathCache.set(cacheKey, path);
+      // Bounded cache. If we hit the cap, flush — paths are cheap to recompute
+      // and the next round of churn will re-warm the cache anyway.
+      if (this._pathCache.size >= this._pathCacheCap) this._pathCache.clear();
+      this._pathCache.set(cacheKey, path);
+      return path === null ? null : path.map(p => ({ q: p.q, r: p.r }));
+    }
+
+    const path = this._findPathUncached(sq, sr, gq, gr, extraBlocked);
     return path === null ? null : path.map(p => ({ q: p.q, r: p.r }));
   }
 
-  _findPathUncached(sq, sr, gq, gr) {
+  _findPathUncached(sq, sr, gq, gr, extraBlocked = null) {
     const open   = new Map();   // key → node
     const closed = new Set();
     const startK = this._key(sq, sr);
@@ -196,11 +204,13 @@ export class HexGrid {
 
       for (const { q, r } of this.neighbors(best.q, best.r)) {
         const k = this._key(q, r);
-        if (closed.has(k))                             continue;
-        if (!this.canTraverse(best.q, best.r, q, r))   continue;
+        if (closed.has(k))                              continue;
+        if (!this.canTraverse(best.q, best.r, q, r))    continue;
+        // Treat extra blocked hexes as impassable, but always allow reaching the goal.
+        if (extraBlocked?.has(k) && !(q === gq && r === gr)) continue;
         const g = best.g + 1;
         const existing = open.get(k);
-        if (existing && existing.g <= g)               continue;
+        if (existing && existing.g <= g)                continue;
         open.set(k, { q, r, g, f: g + this.hexDistance(q, r, gq, gr), parent: best });
       }
     }

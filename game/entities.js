@@ -14,6 +14,10 @@ import { FeedingTray } from './components/feeding_tray.js';
 import { Building } from './components/building.js';
 import { ConstructionSite } from './components/construction_site.js';
 import { InstancedBuilding } from './components/instanced_building.js';
+import { Ladybug } from './components/ladybug.js';
+import { SoldierAnt } from './components/soldier_ant.js';
+import { Health } from '../engine/components/health.js';
+import { CombatAnimator } from '../engine/components/combat_animator.js';
 
 // Helper for player-placed buildings: spawn in CONSTRUCTING state with a
 // translucent ghost overlay, deferring the gameplay component until workers
@@ -35,6 +39,28 @@ function attachConstruction(go, def, addGameplay) {
 }
 
 export const ENTITY_DEFS = [
+  new EntityDef({
+    id: 'palisade', name: 'Palisade', icon: '🪵',
+    modelUrl: 'assets/models/Palisade.glb',
+    yOffset: 0, occupiesHex: true,
+    createObject() {
+      const go = new GameObject('Palisade');
+      go.object3D.add(cloneModel(this.modelUrl));
+      go.addComponent(new Health({ hp: 8,
+        onHit:  (_, g) => g.getComponent(CombatAnimator)?.playHit(),
+        onDeath: (g) => {
+          const grid = g.game.hexGrid;
+          if (grid) {
+            const hex = grid.worldToHex(g.position.x, g.position.z);
+            grid.free(hex.q, hex.r);
+          }
+          g.game.remove(g);
+        },
+      }));
+      go.addComponent(new CombatAnimator());
+      return go;
+    },
+  }),
   new EntityDef({
     id: 'watchtower', name: 'Watchtower', icon: '🗼', iconUrl: 'assets/icons/WatchTower.png', yOffset: 0, occupiesHex: true,
     modelUrl: 'assets/models/WatchTower.glb',
@@ -103,6 +129,10 @@ export const ENTITY_DEFS = [
       go.addComponent(new Mover(1.5));
       go.addComponent(new GOAPAgent());
       go.addComponent(new Worker());
+      go.addComponent(new Health({ hp: 2, onDeath: (g) => g.game.remove(g),
+        onHit: (_, g) => g.getComponent(CombatAnimator)?.playHit() }));
+      go.addComponent(new CombatAnimator());
+
       if (game?.antInstances) go.addComponent(new InstancedRenderer(game.antInstances));
       return go;
     },
@@ -114,6 +144,12 @@ export const ENTITY_DEFS = [
       const go = new GameObject('Queen');
       go.addComponent(new Mover(1.0));
       go.addComponent(new Queen());
+      go.addComponent(new Health({ hp: 10, onDeath: (g) => {
+        g.game.remove(g);
+        g.game.triggerGameOver?.();
+      }, onHit: (_, g) => g.getComponent(CombatAnimator)?.playHit() }));
+      go.addComponent(new CombatAnimator());
+
       if (game?.queenInstances) go.addComponent(new InstancedRenderer(game.queenInstances));
       return go;
     },
@@ -147,6 +183,39 @@ export const ENTITY_DEFS = [
         return g.addComponent(new TrainingHut());
       });
       go.addComponent(new Building(this));
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'soldier_ant', name: 'Soldier Ant', icon: '⚔️',
+    modelUrl: 'assets/models/SoldierAnt.glb',
+    createObject(game) {
+      const go = new GameObject('Soldier Ant');
+      go.addComponent(new Mover(1.3));
+      go.addComponent(new SoldierAnt());
+      go.addComponent(new Health({ hp: 4, onDeath: (g) => g.game.remove(g),
+        onHit: (_, g) => g.getComponent(CombatAnimator)?.playHit() }));
+      go.addComponent(new CombatAnimator());
+
+      if (game?.soldierAntInstances) go.addComponent(new InstancedRenderer(game.soldierAntInstances));
+      return go;
+    },
+  }),
+  new EntityDef({
+    id: 'ladybug', name: 'Ladybug', icon: '🐞',
+    modelUrl: 'assets/models/Ladybug.glb',
+    createObject(game) {
+      const go = new GameObject('Ladybug');
+      go.faction = 'enemy';
+      const model = cloneModel(this.modelUrl);
+      model.scale.setScalar(0.4);
+      go.object3D.add(model);
+      go.addComponent(new Mover(0.8));
+      go.addComponent(new Ladybug());
+      go.addComponent(new Health({ hp: 8, onDeath: (g) => g.game.remove(g),
+        onHit: (_, g) => g.getComponent(CombatAnimator)?.playHit() }));
+      go.addComponent(new CombatAnimator());
+
       return go;
     },
   }),
