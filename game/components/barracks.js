@@ -1,5 +1,6 @@
 import { Component } from '../../engine/gameobject.js';
 import { ENTITY_DEFS } from '../entities.js';
+import { SoldierAnt } from './soldier_ant.js';
 
 // Barracks — accepts eggs delivered by workers and trains them into Soldier Ants.
 // Works identically to TrainingHut but spawns soldier_ant instead of ant.
@@ -30,9 +31,22 @@ export class Barracks extends Component {
     const game = this.gameObject.game;
     const def  = ENTITY_DEFS.find(d => d.id === 'soldier_ant');
     if (!def || !game) return;
-    const go = def.createObject(game);
-    go.object3D.position.copy(this.gameObject.object3D.position);
+
+    const pos  = this.gameObject.object3D.position;
+    const grid = game.hexGrid;
+    const go   = def.createObject(game);
+    go.object3D.position.copy(pos);
     game.add(go);
+
+    // Walk the soldier out to the entrance hex so it doesn't stand inside the building.
+    if (grid) {
+      const hex = grid.worldToHex(pos.x, pos.z);
+      const ent = grid.getEntrance(hex.q, hex.r);
+      if (ent) {
+        const exit = grid.hexToWorld(hex.q + ent[0], hex.r + ent[1]);
+        go.getComponent(SoldierAnt)?.commandMove(exit);
+      }
+    }
   }
 
   getContextMenu() {

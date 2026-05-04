@@ -65,6 +65,10 @@ export class InstancedMeshGroup {
     let id;
     if (this._free.length) {
       id = this._free.pop();
+      // Reusing a freed slot that may be below the current high-water mark.
+      // _refreshCount starts its scan from _highWater, so we must extend it
+      // to cover the reused slot or count stays 0 and the instance is invisible.
+      if (id >= this._highWater) this._highWater = id + 1;
     } else {
       if (this._highWater >= this.capacity) {
         throw new Error(`InstancedMeshGroup(${this.url}): capacity ${this.capacity} exceeded`);
