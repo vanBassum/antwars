@@ -50,7 +50,7 @@ export class CameraRig extends Component {
     window.addEventListener('keyup',   (e) => { this._keys[e.code] = false; });
   }
 
-  update(dt) {
+  update(_dt, rawDt) {
     let fx = 0, fz = 0;
     if (this._keys['KeyW'] || this._keys['ArrowUp'])    fz -= 1;
     if (this._keys['KeyS'] || this._keys['ArrowDown'])  fz += 1;
@@ -58,7 +58,7 @@ export class CameraRig extends Component {
     if (this._keys['KeyD'] || this._keys['ArrowRight']) fx += 1;
     if (fx === 0 && fz === 0) return;
 
-    const speed = PAN_SPEED * (this._dist / 20) * dt;
+    const speed = PAN_SPEED * (this._dist / 20) * rawDt;
     this._target.x += (fx * Math.cos(this._azimuth) + fz * Math.sin(this._azimuth)) * speed;
     this._target.z += (fz * Math.cos(this._azimuth) - fx * Math.sin(this._azimuth)) * speed;
     this._apply();
