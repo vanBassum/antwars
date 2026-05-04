@@ -141,9 +141,9 @@ const data = await res.json();
 if (data.resources) {
   for (const [key, value] of Object.entries(data.resources)) game.resources.set(key, value);
 }
-new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
-
 game.selectionManager = new SelectionManager(game);
+
+new WorldLoader(ENTITY_DEFS, hexGrid).load(game, data);
 
 const placement = new PlacementController(game);
 game.placement   = placement;
