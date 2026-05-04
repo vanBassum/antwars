@@ -1,9 +1,9 @@
 import { ENTITY_DEFS } from './entities.js';
 
 const FIRST_WAVE_DELAY = 60;   // seconds before the first wave arrives
-const WAVE_INTERVAL    = 90;   // seconds between subsequent waves
-const BASE_COUNT       = 3;    // ladybugs in wave 1
-const COUNT_PER_WAVE   = 2;    // extra ladybugs added each successive wave
+const WAVE_INTERVAL    = 60;   // seconds between subsequent waves
+const BASE_COUNT       = 1;    // ladybugs in wave 1
+const COUNT_PER_WAVE   = 1;    // extra ladybugs added each successive wave
 
 // Spawns escalating waves of ladybug enemies from the hex-grid boundary.
 // Called every frame via game.onTick(dt).
