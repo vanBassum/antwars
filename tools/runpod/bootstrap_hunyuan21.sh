@@ -44,8 +44,19 @@ cd "$REPO"
 python -c "import torch;print('[env] torch',torch.__version__,'cuda',torch.version.cuda,torch.cuda.is_available())"
 
 pip install -q --upgrade pip
-grep -viE '^\s*(torch|torchvision|torchaudio)\b' requirements.txt > /tmp/req21.txt
-pip install -q -r /tmp/req21.txt
+grep -viE '^\s*(torch|torchvision|torchaudio|bpy)\b' requirements.txt > /tmp/req21.txt
+# pip is all-or-nothing: ONE unresolvable pin means NOTHING in the file gets
+# installed. bpy==4.0 has no wheel for py>=3.11 (only 4.2.0+), which silently
+# took out einops and the rest, surfacing 35 min later as "No module named
+# 'einops'" at inference. Filtered above; checked here so a future bad pin
+# costs two minutes instead of a whole paid run.
+if ! pip install -q -r /tmp/req21.txt; then
+  echo "[warn] bulk requirements install failed - see the log for the bad pin"
+  pip install -q einops omegaconf safetensors numpy scipy tqdm pyyaml opencv-python-headless scikit-image torchdiffeq || { echo "FATAL: minimal shape-gen subset failed"; exit 1; }
+fi
+# Belt and braces: what shape-only generation actually imports. Explicit so a
+# partial requirements failure cannot hide them again.
+pip install -q einops omegaconf || { echo "FATAL: einops/omegaconf unavailable"; exit 1; }
 pip install -q "huggingface_hub[cli]" onnxruntime rembg pymeshlab trimesh pygltflib
 
 # Same trap as 2.0: requirements.txt does not pin the HF stack, transformers >=5
