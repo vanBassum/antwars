@@ -58,7 +58,7 @@ python -u tools/runpod/job.py run \
   --bootstrap tools/runpod/bootstrap_p3sam.sh \
   --script tools/runpod/remote_p3sam.py \
   --upload out/turret/01_whole_object/turret_untextured.glb \
-  --cmd "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python /workspace/remote_p3sam.py --mesh /workspace/job/in/turret_untextured.glb --out /workspace/job/out --point-num 50000 --prompt-num 200" \
+  --cmd "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python /workspace/remote_p3sam.py --mesh /workspace/job/in/turret_untextured.glb --out /workspace/job/out --point-num 25000 --prompt-num 200" \
   --out out/bakeoff/p3sam --max-runtime 3600 --volume 60
 
 # PartCrafter — generates 3 parts natively from one image
@@ -91,10 +91,12 @@ python -u tools/runpod/job.py run \
 ```
 
 Then build the comparison table (it reads the confirmed billing rate and wall
-clock out of the job logs, so the cost column is what was really paid):
+clock out of the job logs, so the cost column is what was really paid). Tee
+each `job.py run` to `out/bakeoff/logs/<name>.log` when you launch it —
+without those on disk there is nothing for the cost column to read:
 
 ```bash
-python tools/collect_bakeoff.py --raw out/bakeoff --out out/bakeoff --logs <dir-with-the-job-logs>
+python tools/collect_bakeoff.py --raw out/bakeoff --out out/bakeoff --logs out/bakeoff/logs
 ```
 
 ## Setup on a new machine
@@ -145,25 +147,43 @@ around $1.10-1.40/hr aggregate.
   ~48 GB. The cheapest 48 GB community card right now is an **L40 at $0.690/hr**,
   above the cap; A40 shows no stock. So 2.1 runs shape-only. This was previously
   noted as "A6000 at ~$0.33/hr" — that is no longer true of the catalogue.
-- **P3-SAM does not fit on 24 GB, and the obvious knobs do not help.** It OOMs
-  in `predict_aabb` with ~19.6 GB already resident when it asks for another
-  6.10 GB. Halving both `--point-num` (100k -> 50k) and `--prompt-num`
-  (400 -> 200) changed the failure *not at all*: two runs, one at full settings
-  and one at half, failed with 19.67/6.10 GB and 19.57/6.10 GB respectively.
-  The 6.10 GB request is a fixed-size allocation that those arguments do not
-  influence, so tuning them is a dead end — do not spend another run on it.
-  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` was set for the second
-  attempt and also made no difference.
+  This applies to 2.1's texture pass only. It was wrongly generalised to P3-SAM,
+  which is not blocked on 48 GB — a **32 GB RTX 5000 Ada at $0.490/hr is in
+  stock and under the cap**, and `--min-vram 32` pins it.
+- **P3-SAM's `--point-num` / `--prompt-num` flags are inert — the OOM was never
+  about allocation size being fixed.** `mesh_sam()` in `P3-SAM/demo/auto_mask.py`
+  accepts `point_num=100000, prompt_num=400` in its signature (lines 761-762) and
+  then **reassigns both to those same constants at lines 779-780**, before either
+  is used. `remote_p3sam.py` passes the CLI values to `AutoMask.predict_aabb`,
+  which forwards to `mesh_sam`, which discards them. Every run so far — both
+  24 GB attempts and the 32 GB one — actually executed at 100000/400 regardless
+  of what was on the command line. That, not a fixed-size allocation, is why
+  "halving the flags changed the failure not at all". The earlier conclusion in
+  this file was right about the symptom and wrong about the cause.
 
-  Untried, in rough order of promise:
-  1. Feed it a **smaller mesh**. Both attempts used the 80k-face turret. If the
-     allocation scales with face or vertex count, a 20k-face decimation may fit,
-     and the labels transfer back onto the full mesh anyway — that is exactly
-     what `tools/apply_p3sam_parts.py` does, by nearest-face-centroid.
-  2. Check whether `AutoMask` honours these arguments at all, or whether it
-     carries its own internal defaults. Read `P3-SAM/demo/auto_mask.py` before
-     the next paid run rather than after it.
-  3. A 48 GB card — blocked on price, see the note above.
+  `bootstrap_p3sam.sh` now sed-patches those two lines after the clone so the
+  parameters take effect. The patch is anchored to the bare statements at
+  4-space indent, so it cannot touch the kwarg defaults in the signature, and it
+  warns instead of failing silently if upstream changes the code.
+
+  On a **32 GB** card (RTX 5000 Ada, $0.490/hr — under the cap, so the "48 GB or
+  bust" framing was also wrong) it cleared `predict_aabb` and the 6.10 GB
+  allocation entirely, then OOMed deeper in, at `auto_mask.py:79` in
+  `get_mask` → `torch.cat`: 22.69 GB resident, asking **9.26 GiB**, against
+  31.48 GB capacity. So the allocations are not fixed — they grow as it
+  progresses. That run cost $0.044 and failed in 5.4 min.
+
+  The failing tensor is `feats_seg_3`, shape `[K, N, ~1033]` with `N = point_num`
+  and `K = prompt_bs` (32, a separate knob `remote_p3sam.py` does not expose).
+  It is therefore **linear in `point_num`**: ~13 GB in fp32 at the real N=100000,
+  ~3 GB at N=25000. Note `prompt_num` only sets the number of batches
+  (`prompt_num // prompt_bs + 1`), so it affects runtime, not peak VRAM — lower
+  `point_num`, not `prompt_num`, to fit a smaller card.
+
+  Still untried: feeding a **decimated mesh** (both 24 GB attempts used the
+  80k-face turret). Labels transfer back onto the full mesh by
+  nearest-face-centroid, which is what `tools/apply_p3sam_parts.py` does — so if
+  the point-count route stalls, this is the next lever.
 - **Cut planes do not generalise.** `split_turret_parts.py` assumes the joint is
   a plane perpendicular to a world axis and each part is contiguous in its
   half-space. That already broke on this model — `--gun-radius` exists only

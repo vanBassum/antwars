@@ -176,20 +176,31 @@ class PodSession:
             return self
 
         attempts = getattr(self.args, "attempts", 3)
+        last = None
         for i in range(1, attempts + 1):
             self._create()
-            self._connect()
-            problem = (None if getattr(self.args, "skip_gpu_check", False)
-                       else self._gpu_problem())
+            # _connect() signals failure by RAISING, while _gpu_problem()
+            # signals it by RETURNING a string. Only the latter used to reach
+            # the rotation below, so a host that never opened SSH escaped this
+            # loop entirely and --attempts did not cover the single most common
+            # dud-host mode - it burned the full 900s wait and gave up on one
+            # host. Treat both the same way.
+            try:
+                self._connect()
+                problem = (None if getattr(self.args, "skip_gpu_check", False)
+                           else self._gpu_problem())
+            except (rp.RunpodError, RuntimeError, OSError) as e:
+                problem = f"{type(e).__name__}: {str(e)[:160]}"
             if not problem:
                 return self
+            last = problem
             log(f"attempt {i}/{attempts}: {problem}")
             log("discarding this host and trying another")
             self.terminate()
             self.pod_id, self.terminated = None, False
         raise RuntimeError(
-            f"no usable host after {attempts} attempts - CUDA was unavailable "
-            "on every one. Try again later or --cloud SECURE.")
+            f"no usable host after {attempts} attempts. Last failure: {last}. "
+            "Try again later or --cloud SECURE.")
 
     # Some community hosts hand out a GPU that nvidia-smi reports happily but
     # CUDA cannot initialise ("CUDA unknown error"), e.g. driver 580/CUDA 13

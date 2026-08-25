@@ -41,6 +41,24 @@ echo "[env] torch=$TORCH_VER $CU $PY"
 cd "$WORK"
 [ -d "$REPO/.git" ] || git clone --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-Part.git "$REPO"
 
+# auto_mask.mesh_sam() takes point_num/prompt_num, then reassigns both to
+# hardcoded constants (100000 / 400) at lines 779-780 before either is used,
+# silently discarding whatever AutoMask.predict_aabb passed down. That is why
+# halving the CLI flags previously changed the OOM not at all - they never
+# reached the code. Anchored so it can only hit those two bare statements,
+# not the kwarg defaults in the signature.
+AM="$REPO/P3-SAM/demo/auto_mask.py"
+if [ -f "$AM" ]; then
+  sed -i -e 's/^    point_num = 100000$/    point_num = point_num if point_num else 100000/' -e 's/^    prompt_num = 400$/    prompt_num = prompt_num if prompt_num else 400/' "$AM"
+  if grep -q "point_num = point_num if" "$AM"; then
+    echo "[p3sam-patch] mesh_sam now honours point_num/prompt_num"
+  else
+    echo "[p3sam-patch] WARNING: hardcode not found - upstream may have changed it"
+  fi
+else
+  echo "[p3sam-patch] WARNING: $AM missing"
+fi
+
 pip install -q viser fpsample numba timm addict easydict scikit-image scikit-learn \
   omegaconf trimesh huggingface_hub "numpy<2"
 
