@@ -159,7 +159,8 @@ class PodSession:
         for i in range(1, attempts + 1):
             self._create()
             self._connect()
-            problem = self._gpu_problem()
+            problem = (None if getattr(self.args, "skip_gpu_check", False)
+                       else self._gpu_problem())
             if not problem:
                 return self
             log(f"attempt {i}/{attempts}: {problem}")
@@ -170,15 +171,37 @@ class PodSession:
             f"no usable host after {attempts} attempts - CUDA was unavailable "
             "on every one. Try again later or --cloud SECURE.")
 
+    # Some community hosts hand out a GPU that nvidia-smi reports happily but
+    # CUDA cannot initialise ("CUDA unknown error"), e.g. driver 580/CUDA 13
+    # boxes against this cu124 torch build. A healthy host passes on the first
+    # probe, so this is a short sanity window, not a wait for warm-up - keep it
+    # tight, every second of it is billed.
+    GPU_READY_TIMEOUT = 75
+    GPU_POLL = 10
+
+    GPU_PROBE = (
+        'python -c "'
+        "import torch;"
+        "a=torch.cuda.is_available();"
+        "print('avail',a,'count',torch.cuda.device_count());"
+        "print('alloc', (torch.zeros(1).cuda().sum().item() if a else 'skipped'))"
+        '" 2>&1'
+    )
+
     def _gpu_problem(self):
-        """None if the GPU is usable, else why not."""
-        p = self.sh('python -c "import torch;print(torch.cuda.is_available(), '
-                    'torch.cuda.device_count())"', check=False, stream=False)
-        out = (p.stdout or "").strip()
-        if not out.startswith("True"):
-            return f"torch.cuda.is_available() -> {out or (p.stderr or '')[:120]}"
-        log(f"cuda ok: {out}")
-        return None
+        """None once the GPU is actually usable, else why not (after polling)."""
+        deadline = time.time() + self.GPU_READY_TIMEOUT
+        last = ""
+        while time.time() < deadline:
+            out = (self.sh(self.GPU_PROBE, check=False,
+                           stream=False).stdout or "").strip()
+            last = out.replace("\n", " | ")[:300]
+            if "avail True" in out and "alloc 0.0" in out:
+                log(f"cuda ready: {last}")
+                return None
+            log(f"waiting for cuda: {last}")
+            time.sleep(self.GPU_POLL)
+        return f"CUDA never became usable in {self.GPU_READY_TIMEOUT}s: {last}"
 
     def __exit__(self, exc_type, exc, tb):
         elapsed = time.time() - self.t0
@@ -203,6 +226,10 @@ class PodSession:
         a = self.args
         secure = a.cloud == "SECURE"
         cands = rp.pick_gpu(MIN_VRAM_GB, a.max_price, secure=secure)
+        if getattr(a, "gpu_type", None):
+            cands = [g for g in cands if g["id"] == a.gpu_type] or [
+                {"id": a.gpu_type, "price": a.max_price, "vram": MIN_VRAM_GB,
+                 "stock": "pinned"}]
         log(f"cheapest in-stock {a.cloud} candidates:")
         for g in cands[:6]:
             log(f"   ${g['price']:.3f}/hr  {g['vram']:>3}GB  {g['stock']:<6} {g['id']}")
@@ -410,6 +437,34 @@ def cmd_turret(args):
     return 0
 
 
+def cmd_diag(args):
+    """Provision a pod and dump GPU/env state. Bypasses the CUDA gate so it can
+    inspect a host that the gate would reject."""
+    args.skip_gpu_check = True
+    with PodSession(args) as s:
+        def show(title, cmd, raw):
+            out = s.sh(cmd, raw=raw, check=False, stream=False)
+            body = ((out.stdout or "") + (out.stderr or "")).strip()
+            log(f"--- {title} ---" + chr(10) + body[:900])
+
+        show("nvidia-smi (raw ssh)", "nvidia-smi", True)
+        show("cuda-related env, RAW ssh", "env | grep -i -E 'cuda|nvidia' | sort", True)
+        show("cuda-related env, WITH prelude",
+             "env | grep -i -E 'cuda|nvidia' | sort", False)
+        show("/etc/rp_environment", "cat /etc/rp_environment 2>&1", True)
+        probe = ('python -c "import torch;print(torch.cuda.is_available(),'
+                 'torch.cuda.device_count());import os;'
+                 "print('CVD=',repr(os.environ.get('CUDA_VISIBLE_DEVICES')))" '" 2>&1')
+        show("torch, RAW ssh (no prelude)", probe, True)
+        show("torch, WITH prelude", probe, False)
+        show("torch, prelude but CVD unset",
+             "unset CUDA_VISIBLE_DEVICES; " + probe, False)
+        show("nvidia device nodes", "ls -l /dev/nvidia* 2>&1", True)
+        show("uvm module on host", "cat /proc/modules | grep -i uvm 2>&1", True)
+        show("dmesg/driver", "cat /proc/driver/nvidia/version 2>&1", True)
+    return 0
+
+
 def cmd_kill(args):
     if getattr(args, "pod_id", None):
         print(rp.terminate_pod(args.pod_id))
@@ -441,6 +496,8 @@ def _add_pod_args(p, runtime=MAX_RUNTIME_SEC, disk=80, volume=80):
     p.add_argument("--max-runtime", type=int, default=runtime)
     p.add_argument("--disk", type=int, default=disk)
     p.add_argument("--volume", type=int, default=volume)
+    p.add_argument("--gpu-type", default=None,
+                   help="pin one GPU type id instead of picking the cheapest")
     p.add_argument("--cloud", default="COMMUNITY",
                    choices=["SECURE", "COMMUNITY"],
                    help="COMMUNITY is 2-3x cheaper for this workload")
@@ -476,6 +533,10 @@ def main():
     t.add_argument("--skip-segment", action="store_true")
     _add_pod_args(t)
     t.set_defaults(func=cmd_turret)
+
+    d = sub.add_parser("diag")
+    _add_pod_args(d, runtime=900, disk=20, volume=0)
+    d.set_defaults(func=cmd_diag, name="diag")
 
     k = sub.add_parser("kill")
     k.add_argument("pod_id", nargs="?")
