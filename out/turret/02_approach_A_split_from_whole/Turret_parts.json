@@ -1,0 +1,46 @@
+{
+  "name": "Turret",
+  "hierarchy": "Base > Head > Gun",
+  "pivots_world": {
+    "Base": [
+      -0.01056,
+      -0.91685,
+      -0.14919
+    ],
+    "Head": [
+      0.093,
+      -0.2,
+      -0.33003
+    ],
+    "Gun": [
+      -0.01481,
+      0.35905,
+      0.33
+    ]
+  },
+  "local_offsets": {
+    "Head_from_Base": [
+      0.10356,
+      0.71685,
+      -0.18084
+    ],
+    "Gun_from_Head": [
+      -0.1078,
+      0.55905,
+      0.66003
+    ]
+  },
+  "faces": {
+    "Base": 52564,
+    "Head": 18463,
+    "Gun": 2951
+  },
+  "method": "cut-planes",
+  "cuts": {
+    "base_top": -0.2,
+    "gun_front": 0.33,
+    "gun_radius": 0.17,
+    "up": "y",
+    "forward": "+z"
+  }
+}

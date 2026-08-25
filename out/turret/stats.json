@@ -1,0 +1,158 @@
+{
+  "turret_textured.glb": {
+    "faces": 80000,
+    "kb": 4843.3671875,
+    "boundary": 32334,
+    "watertight": false,
+    "extents": [
+      1.857,
+      1.79,
+      1.974
+    ],
+    "quantised": false
+  },
+  "turret_untextured.glb": {
+    "faces": 80000,
+    "kb": 1403.4375,
+    "boundary": 0,
+    "watertight": true,
+    "extents": [
+      1.857,
+      1.79,
+      1.974
+    ],
+    "quantised": false
+  },
+  "turret_raw_predecimation.glb": {
+    "faces": 1957236,
+    "kb": 34401.85546875,
+    "boundary": 0,
+    "watertight": false,
+    "extents": [
+      1.857,
+      1.79,
+      1.973
+    ],
+    "quantised": false
+  },
+  "A/Turret.glb": {
+    "faces": 73978,
+    "kb": 4633.14453125,
+    "boundary": 25580,
+    "watertight": false,
+    "extents": [
+      1.857,
+      1.789,
+      1.974
+    ],
+    "quantised": false
+  },
+  "A/Turret_Base.glb": {
+    "faces": 52564,
+    "kb": 4098.9765625,
+    "boundary": 18530,
+    "watertight": false,
+    "extents": [
+      1.857,
+      0.735,
+      1.7
+    ],
+    "quantised": false
+  },
+  "A/Turret_Gun.glb": {
+    "faces": 2951,
+    "kb": 2856.125,
+    "boundary": 1035,
+    "watertight": false,
+    "extents": [
+      0.247,
+      0.295,
+      0.657
+    ],
+    "quantised": false
+  },
+  "A/Turret_Head.glb": {
+    "faces": 18463,
+    "kb": 3240.48828125,
+    "boundary": 6015,
+    "watertight": false,
+    "extents": [
+      1.268,
+      1.095,
+      1.339
+    ],
+    "quantised": false
+  },
+  "C/Base.glb": {
+    "faces": 40000,
+    "kb": 3602.15234375,
+    "boundary": 19608,
+    "watertight": false,
+    "extents": [
+      1.956,
+      0.832,
+      1.967
+    ],
+    "quantised": false
+  },
+  "C/Head.glb": {
+    "faces": 40000,
+    "kb": 3513.875,
+    "boundary": 13398,
+    "watertight": false,
+    "extents": [
+      1.967,
+      1.352,
+      1.969
+    ],
+    "quantised": false
+  },
+  "C/Gun.glb": {
+    "faces": 40000,
+    "kb": 3334.2578125,
+    "boundary": 11024,
+    "watertight": false,
+    "extents": [
+      0.997,
+      0.953,
+      1.969
+    ],
+    "quantised": false
+  },
+  "game/Turret_Base.glb": {
+    "faces": 7478,
+    "kb": 474.75390625,
+    "boundary": 7972,
+    "watertight": false,
+    "extents": [
+      1.848,
+      0.732,
+      1.694
+    ],
+    "quantised": true
+  },
+  "game/Turret_Gun.glb": {
+    "faces": 687,
+    "kb": 348.24609375,
+    "boundary": 593,
+    "watertight": false,
+    "extents": [
+      0.247,
+      0.295,
+      0.656
+    ],
+    "quantised": true
+  },
+  "game/Turret_Head.glb": {
+    "faces": 1967,
+    "kb": 373.6953125,
+    "boundary": 2123,
+    "watertight": false,
+    "extents": [
+      1.259,
+      1.095,
+      1.339
+    ],
+    "quantised": true
+  }
+}
