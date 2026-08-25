@@ -64,14 +64,14 @@ def _gql(query, variables=None):
 # ---------------------------------------------------------------- gpu selection
 
 GPU_QUERY = """
-query GpuTypes {
+query GpuTypes($secure: Boolean) {
   gpuTypes {
     id
     displayName
     memoryInGb
     secureCloud
     communityCloud
-    lowestPrice(input: {gpuCount: 1}) {
+    lowestPrice(input: {gpuCount: 1, secureCloud: $secure}) {
       uninterruptablePrice
       minimumBidPrice
       stockStatus
@@ -81,9 +81,13 @@ query GpuTypes {
 """
 
 
-def gpu_catalog():
+def gpu_catalog(secure=None):
+    """secure=True prices secure cloud only, False community only, None both.
+
+    This matters: the all-clouds price is the community one, and creating a
+    SECURE pod against it silently costs 2-3x the estimate."""
     out = []
-    for g in _gql(GPU_QUERY)["gpuTypes"]:
+    for g in _gql(GPU_QUERY, {"secure": secure})["gpuTypes"]:
         lp = g.get("lowestPrice") or {}
         price = lp.get("uninterruptablePrice")
         out.append(
@@ -100,11 +104,11 @@ def gpu_catalog():
     return out
 
 
-def pick_gpu(min_vram=24, max_price=0.60, exclude=()):
+def pick_gpu(min_vram=24, max_price=0.60, exclude=(), secure=None):
     """Cheapest GPU with >= min_vram GB, priced at or below max_price, in stock."""
     cands = [
         g
-        for g in gpu_catalog()
+        for g in gpu_catalog(secure=secure)
         if g["vram"] >= min_vram
         and g["price"] is not None
         and g["price"] <= max_price
@@ -143,14 +147,10 @@ def create_pod(
         "containerDiskInGb": container_disk_gb,
         "ports": list(ports),
         "cloudType": cloud_type,
+        # No dockerStartCmd: the runpod/* images already install PUBLIC_KEY into
+        # authorized_keys and start sshd from their own entrypoint. Overriding it
+        # means no sshd, and the pod is unreachable.
         "env": {"PUBLIC_KEY": public_key, **(env or {})},
-        "dockerStartCmd": [
-            "bash",
-            "-lc",
-            "mkdir -p ~/.ssh && echo \"$PUBLIC_KEY\" >> ~/.ssh/authorized_keys "
-            "&& chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys "
-            "&& service ssh start 2>/dev/null || /usr/sbin/sshd; sleep infinity",
-        ],
     }
     if volume_gb:
         body["volumeInGb"] = volume_gb

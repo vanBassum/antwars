@@ -119,6 +119,7 @@ def main():
     ap.add_argument("--part-faces", type=int, default=40000)
     ap.add_argument("--point-num", type=int, default=100000)
     ap.add_argument("--prompt-num", type=int, default=400)
+    ap.add_argument("--no-texture", action="store_true")
     ap.add_argument("--skip-parts", action="store_true")
     ap.add_argument("--skip-segment", action="store_true")
     a = ap.parse_args()
@@ -130,7 +131,8 @@ def main():
     # ---- 1. whole turret
     t0 = time.time()
     full = generate(inp / "views_turret", out / "full",
-                    a.steps, a.octree, a.guidance, a.seed, a.faces)
+                    a.steps, a.octree, a.guidance, a.seed, a.faces,
+                    texture=not a.no_texture)
     report["stages"]["full"] = {"ok": full.exists(), "sec": round(time.time() - t0)}
     log(f"full turret -> {full}")
 
@@ -155,7 +157,8 @@ def main():
             t0 = time.time()
             try:
                 p = generate(views, out / f"part_{part}", a.steps, a.part_octree,
-                             a.guidance, a.seed, a.part_faces)
+                             a.guidance, a.seed, a.part_faces,
+                             texture=not a.no_texture)
                 report["stages"][f"part_{part}"] = {
                     "ok": p.exists(), "sec": round(time.time() - t0)}
             except Exception as e:
