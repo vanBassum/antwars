@@ -559,6 +559,11 @@ def _add_pod_args(p, runtime=MAX_RUNTIME_SEC, disk=80, volume=80):
     p.add_argument("--volume", type=int, default=volume)
     p.add_argument("--gpu-type", default=None,
                    help="pin one GPU type id instead of picking the cheapest")
+    p.add_argument("--attempts", type=int, default=3,
+                   help="how many hosts to try before giving up. Whole "
+                        "datacenters sometimes hand out GPUs that pass "
+                        "nvidia-smi but fail CUDA init, and 3 rotations can "
+                        "land inside one of them.")
     p.add_argument("--shape-only", action="store_true",
                    help="skip texture generation. Exported to the pod as "
                         "SKIP_TEXGEN, which the bootstraps read to avoid "
