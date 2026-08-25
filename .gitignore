@@ -12,3 +12,7 @@ assets/reference/
 
 # Python bytecode cache from auto_import scripts
 __pycache__/
+
+# runpod job scratch
+tools/runpod/.job_state.json
+out/
