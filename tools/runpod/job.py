@@ -225,7 +225,8 @@ class PodSession:
     def _create(self):
         a = self.args
         secure = a.cloud == "SECURE"
-        cands = rp.pick_gpu(MIN_VRAM_GB, a.max_price, secure=secure)
+        cands = rp.pick_gpu(getattr(a, "min_vram", None) or MIN_VRAM_GB,
+                            a.max_price, secure=secure)
         if getattr(a, "gpu_type", None):
             cands = [g for g in cands if g["id"] == a.gpu_type] or [
                 {"id": a.gpu_type, "price": a.max_price, "vram": MIN_VRAM_GB,
@@ -243,7 +244,7 @@ class PodSession:
 
         pod = rp.create_pod(
             name=a.name,
-            image=IMAGE,
+            image=getattr(a, "image", None) or IMAGE,
             gpu_type_ids=[g["id"] for g in cands[:5]],
             public_key=PUBKEY.read_text(encoding="utf-8").strip(),
             container_disk_gb=a.disk,
@@ -465,6 +466,46 @@ def cmd_diag(args):
     return 0
 
 
+def cmd_run(args):
+    """Generic: bootstrap a pod, upload inputs, run a command, fetch results.
+
+    The bake-off models each need their own environment (PartCrafter wants
+    torch 2.5.1 against Hunyuan's 2.4.1), so each gets its own pod rather than
+    one shared env.
+    """
+    out = Path(args.out).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+
+    with PodSession(args) as s:
+        s.sh("mkdir -p /workspace/job/in /workspace/job/out")
+        s.upload_tools(["arm_failsafe.sh"])
+        for f in args.script or []:
+            s.put(Path(f), f"/workspace/{Path(f).name}")
+        for u in args.upload or []:
+            up = Path(u)
+            s.put(up, "/workspace/job/in/")
+            log(f"uploaded {up.name}")
+
+        if args.bootstrap:
+            bs = Path(args.bootstrap)
+            s.put(bs, f"/workspace/{bs.name}")
+            log(f"=== bootstrap: {bs.name} ===")
+            s.sh(f"bash /workspace/{bs.name}")
+
+        log("=== running ===")
+        s.sh(f"cd /workspace && {args.cmd}")
+
+        log("=== fetching ===")
+        s.get("/workspace/job/out/.", out)
+
+    files = sorted(p for p in out.rglob("*") if p.is_file())
+    for f in files[:40]:
+        log(f"  {f.relative_to(out)}  {f.stat().st_size/1024:.0f} KB")
+    if not files:
+        raise RuntimeError("nothing came back - check the log above")
+    return 0
+
+
 def cmd_kill(args):
     if getattr(args, "pod_id", None):
         print(rp.terminate_pod(args.pod_id))
@@ -498,6 +539,10 @@ def _add_pod_args(p, runtime=MAX_RUNTIME_SEC, disk=80, volume=80):
     p.add_argument("--volume", type=int, default=volume)
     p.add_argument("--gpu-type", default=None,
                    help="pin one GPU type id instead of picking the cheapest")
+    p.add_argument("--min-vram", type=int, default=None,
+                   help=f"minimum GPU VRAM in GB (default {MIN_VRAM_GB}). "
+                        "P3-SAM needs 48 at full prompt count; Hunyuan3D-2.1's "
+                        "texture pass needs 48.")
     p.add_argument("--cloud", default="COMMUNITY",
                    choices=["SECURE", "COMMUNITY"],
                    help="COMMUNITY is 2-3x cheaper for this workload")
@@ -537,6 +582,16 @@ def main():
     d = sub.add_parser("diag")
     _add_pod_args(d, runtime=900, disk=20, volume=0)
     d.set_defaults(func=cmd_diag, name="diag")
+
+    r = sub.add_parser("run")
+    r.add_argument("--out", required=True)
+    r.add_argument("--cmd", required=True, help="command to run on the pod")
+    r.add_argument("--bootstrap", default=None, help="setup script to run first")
+    r.add_argument("--script", action="append", help="file to upload to /workspace")
+    r.add_argument("--upload", action="append", help="file/dir -> /workspace/job/in/")
+    r.add_argument("--image", default=None, help="override the docker image")
+    _add_pod_args(r)
+    r.set_defaults(func=cmd_run)
 
     k = sub.add_parser("kill")
     k.add_argument("pod_id", nargs="?")

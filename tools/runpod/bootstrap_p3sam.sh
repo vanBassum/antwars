@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Provision Hunyuan3D-Part (P3-SAM) for native 3D part segmentation.
-# Runs after bootstrap_hunyuan3d.sh on the same pod; shares /workspace and HF_HOME.
+# Self-contained: runs either alongside bootstrap_hunyuan3d.sh on a shared pod,
+# or on a pod of its own against a mesh generated in some earlier run.
 set -uo pipefail
 
 WORK=/workspace
@@ -11,6 +12,15 @@ LOG="$WORK/bootstrap_p3sam.log"
 exec > >(tee -a "$LOG") 2>&1
 echo "=== p3sam bootstrap start $(date -u +%FT%TZ) ==="
 
+# Arm the self-destruct here too. This used to rely on bootstrap_hunyuan3d.sh
+# having armed it earlier on a shared pod; on its own pod that never happens and
+# a stall would leave the GPU billing with nothing to stop it.
+if [ -f "$(dirname "$0")/arm_failsafe.sh" ]; then . "$(dirname "$0")/arm_failsafe.sh"
+elif [ -f /workspace/arm_failsafe.sh ]; then . /workspace/arm_failsafe.sh
+else echo "[failsafe] WARNING: arm_failsafe.sh not found; NOT armed"; fi
+
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
+
 if [ -f "$STAMP" ]; then
   echo "=== already provisioned, skipping ==="
   exit 0
@@ -18,6 +28,10 @@ fi
 
 export HF_HOME="$WORK/hf"
 mkdir -p "$HF_HOME"
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq git build-essential libgl1 libglib2.0-0 ninja-build >/dev/null
 
 TORCH_VER=$(python -c "import torch;print(torch.__version__.split('+')[0])")
 CU=$(python -c "import torch;print('cu'+torch.version.cuda.replace('.',''))")
@@ -27,7 +41,8 @@ echo "[env] torch=$TORCH_VER $CU $PY"
 cd "$WORK"
 [ -d "$REPO/.git" ] || git clone --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-Part.git "$REPO"
 
-pip install -q viser fpsample numba timm addict easydict scikit-image scikit-learn omegaconf
+pip install -q viser fpsample numba timm addict easydict scikit-image scikit-learn \
+  omegaconf trimesh "numpy<2"
 
 # spconv + torch_scatter: sonata's backbone needs both. Prebuilt wheels only.
 pip install -q "spconv-${CU}" || pip install -q spconv-cu124 || echo "[WARN] spconv"
@@ -58,11 +73,15 @@ p = hf_hub_download(repo_id="tencent/Hunyuan3D-Part", filename="p3sam/p3sam.safe
 print("[ok] p3sam weights:", p)
 PY
 
+# Check the import we actually use (auto_mask), not just the model module, and
+# hard-fail on it: a bootstrap that "succeeds" into an unimportable env just
+# moves the failure to the paid part of the run.
 python -c "
-import sys; sys.path.insert(0,'$REPO/P3-SAM')
-import model as _m
-print('[ok] P3-SAM imports resolve')
-" || echo "[WARN] P3-SAM import failed - check the log"
+import sys; sys.path.insert(0,'$REPO/P3-SAM'); sys.path.insert(0,'$REPO/P3-SAM/demo')
+import torch
+from auto_mask import AutoMask, set_seed
+print('[ok] auto_mask imports resolve; torch', torch.__version__)
+" || { echo "FATAL: P3-SAM import failed - see $LOG"; exit 1; }
 
 touch "$STAMP"
 echo "=== p3sam bootstrap done $(date -u +%FT%TZ) ==="
