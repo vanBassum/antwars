@@ -145,9 +145,25 @@ around $1.10-1.40/hr aggregate.
   ~48 GB. The cheapest 48 GB community card right now is an **L40 at $0.690/hr**,
   above the cap; A40 shows no stock. So 2.1 runs shape-only. This was previously
   noted as "A6000 at ~$0.33/hr" — that is no longer true of the catalogue.
-- **P3-SAM OOMs at full settings on 24 GB** (19.7 GB resident before a 6.1 GB
-  allocation). Running at `--point-num 50000 --prompt-num 200`, half the
-  defaults. If the segmentation looks coarse, that is why.
+- **P3-SAM does not fit on 24 GB, and the obvious knobs do not help.** It OOMs
+  in `predict_aabb` with ~19.6 GB already resident when it asks for another
+  6.10 GB. Halving both `--point-num` (100k -> 50k) and `--prompt-num`
+  (400 -> 200) changed the failure *not at all*: two runs, one at full settings
+  and one at half, failed with 19.67/6.10 GB and 19.57/6.10 GB respectively.
+  The 6.10 GB request is a fixed-size allocation that those arguments do not
+  influence, so tuning them is a dead end — do not spend another run on it.
+  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` was set for the second
+  attempt and also made no difference.
+
+  Untried, in rough order of promise:
+  1. Feed it a **smaller mesh**. Both attempts used the 80k-face turret. If the
+     allocation scales with face or vertex count, a 20k-face decimation may fit,
+     and the labels transfer back onto the full mesh anyway — that is exactly
+     what `tools/apply_p3sam_parts.py` does, by nearest-face-centroid.
+  2. Check whether `AutoMask` honours these arguments at all, or whether it
+     carries its own internal defaults. Read `P3-SAM/demo/auto_mask.py` before
+     the next paid run rather than after it.
+  3. A 48 GB card — blocked on price, see the note above.
 - **Cut planes do not generalise.** `split_turret_parts.py` assumes the joint is
   a plane perpendicular to a world axis and each part is contiguous in its
   half-space. That already broke on this model — `--gun-radius` exists only
