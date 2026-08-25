@@ -49,7 +49,17 @@ def main():
         DegenerateFaceRemover,
     )
 
-    rembg = BackgroundRemover()
+    # Built on first use only: constructing it loads u2net (~1 min), which is
+    # pure waste when the views already carry alpha - which they do when they
+    # come from tools/make_turret_views.py.
+    _rembg = []
+
+    def matte(img):
+        if not _rembg:
+            log("view has no alpha - loading rembg/u2net")
+            _rembg.append(BackgroundRemover())
+        return _rembg[0](img.convert("RGB"))
+
     images = {}
     for name in ("front", "back", "left", "right"):
         p = views_dir / f"{name}.png"
@@ -57,8 +67,9 @@ def main():
             continue
         img = Image.open(p)
         if img.mode == "RGB" or img.getextrema()[3][0] == 255:
-            img = rembg(img.convert("RGB"))
+            img = matte(img)
         images[name] = img.convert("RGBA")
+    log(f"rembg {'used' if _rembg else 'skipped (views already matted)'}")
     log(f"views: {sorted(images)}")
     if "front" not in images:
         raise SystemExit("front.png is required")

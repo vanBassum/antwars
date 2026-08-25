@@ -68,10 +68,37 @@ PY
 if [ "${SKIP_TEXGEN:-0}" = "1" ]; then
   echo "[skip] texgen CUDA extensions (SKIP_TEXGEN=1)"
 else
-  ( cd hy3dgen/texgen/custom_rasterizer && pip install -q -e . ) \
+  # --no-build-isolation is REQUIRED: both setup.py files import
+  # torch.utils.cpp_extension at module level, and pip's isolated build env has
+  # no torch, so the build dies with "No module named 'torch'".
+  # CUDA_HOME is unset in this image even though nvcc is present.
+  export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+  # Build only for the GPU we are on; building every arch costs many minutes.
+  export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-$(python -c \
+    'import torch;m,n=torch.cuda.get_device_capability();print(f"{m}.{n}")')}"
+  echo "[texgen] CUDA_HOME=$CUDA_HOME arch=$TORCH_CUDA_ARCH_LIST"
+
+  ( cd hy3dgen/texgen/custom_rasterizer && pip install -q --no-build-isolation -e . ) \
     && echo "[ok] custom_rasterizer" || echo "[WARN] custom_rasterizer build failed"
-  ( cd hy3dgen/texgen/differentiable_renderer && pip install -q -e . ) \
+  ( cd hy3dgen/texgen/differentiable_renderer && pip install -q --no-build-isolation -e . ) \
     && echo "[ok] differentiable_renderer" || echo "[WARN] differentiable_renderer build failed"
+
+  # Texturing is the whole point of a non-SKIP_TEXGEN run; do not let it get to
+  # generation and hand back untextured meshes with only a warning in the log.
+  python - <<'PY'
+import sys
+# torch FIRST: the compiled kernel links against libc10.so, which is only on
+# the loader path once torch itself has been imported. Checking it standalone
+# fails with "libc10.so: cannot open shared object file" on a perfectly good
+# build - which is how the pipeline imports it anyway.
+import torch  # noqa: F401
+try:
+    import custom_rasterizer  # noqa: F401
+except Exception as e:
+    sys.exit(f"FATAL: custom_rasterizer unimportable ({e}). "
+             "Texturing cannot work; re-run with --shape-only or fix the build.")
+print("[ok] custom_rasterizer imports")
+PY
 fi
 
 # Pre-fetch weights onto the volume so re-runs are instant.
@@ -86,7 +113,7 @@ snapshot_download("tencent/Hunyuan3D-2mv", allow_patterns=["hunyuan3d-dit-v2-mv/
 if os.environ.get("SKIP_TEXGEN") == "1":
     print("skipping paint weights (SKIP_TEXGEN=1)")
 else:
-    snapshot_download("tencent/Hunyuan3D-2", allow_patterns=["hunyuan3d-paint-v2-0-turbo/*", "hunyuan3d-delight-v2-0/*", "*.json", "*.yaml"])
+    snapshot_download("tencent/Hunyuan3D-2", allow_patterns=["hunyuan3d-paint-v2-0*/*", "hunyuan3d-delight-v2-0/*", "*.json", "*.yaml"])
 print("weights ready")
 PY
 

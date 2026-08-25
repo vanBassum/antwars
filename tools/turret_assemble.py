@@ -20,15 +20,24 @@ PART_ORDER = ("Base", "Head", "Gun")
 
 
 def load_single_mesh(path) -> trimesh.Trimesh:
-    """Load a GLB as one Trimesh with its texture/UVs intact."""
+    """Load a GLB as one Trimesh, with node transforms baked and UVs intact.
+
+    Walk graph.nodes_geometry rather than geometry.items(): a node's name and
+    the geometry it points at are different things, and tools like gltfpack
+    rename nodes freely. Keying the transform lookup on the geometry name works
+    only for files we wrote ourselves.
+    """
     obj = trimesh.load(str(path), process=False, force="scene")
     if not isinstance(obj, trimesh.Scene):
         return obj
     meshes = []
-    for name, geom in obj.geometry.items():
-        g = geom.copy()
-        g.apply_transform(obj.graph.get(name)[0])
+    for node in obj.graph.nodes_geometry:
+        transform, geom_name = obj.graph[node]
+        g = obj.geometry[geom_name].copy()
+        g.apply_transform(transform)
         meshes.append(g)
+    if not meshes:
+        raise ValueError(f"{path} contains no geometry")
     return trimesh.util.concatenate(meshes) if len(meshes) > 1 else meshes[0]
 
 
