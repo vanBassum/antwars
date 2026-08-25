@@ -42,7 +42,7 @@ cd "$WORK"
 [ -d "$REPO/.git" ] || git clone --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-Part.git "$REPO"
 
 pip install -q viser fpsample numba timm addict easydict scikit-image scikit-learn \
-  omegaconf trimesh "numpy<2"
+  omegaconf trimesh huggingface_hub "numpy<2"
 
 # spconv + torch_scatter: sonata's backbone needs both. Prebuilt wheels only.
 pip install -q "spconv-${CU}" || pip install -q spconv-cu124 || echo "[WARN] spconv"

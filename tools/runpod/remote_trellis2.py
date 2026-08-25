@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Runs ON THE POD. TRELLIS image-to-3D, for the bake-off against Hunyuan3D-2.0.
+"""Runs ON THE POD. TRELLIS.2 image-to-3D, for the bake-off against Hunyuan3D-2.0.
 
-TRELLIS.2's published pipeline class name has moved around between the paper,
-the repo and the HF weights, so the pipeline and the weights repo are both
-resolved by probing rather than hardcoded - a wrong guess would otherwise waste
-the whole paid run on an AttributeError. Whatever it resolves is recorded in
-the report so the result is attributable to a specific model.
+Follows the repo's own example.py: Trellis2ImageTo3DPipeline -> a mesh carrying
+an attribute volume -> o_voxel.postprocess.to_glb. TRELLIS.2 outputs PBR
+materials, so unlike the Hunyuan3D-2.0 arm this produces a GLB with real
+material channels rather than one baked colour map.
 
   python remote_trellis2.py --image /workspace/job/in/front.png \
       --out /workspace/job/out
@@ -19,40 +18,19 @@ import time
 import traceback
 from pathlib import Path
 
+# Both must precede the torch/cv2 imports below.
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 WORK = Path("/workspace")
-REPO = WORK / "TRELLIS2"
+REPO = WORK / "TRELLIS.2"
 os.environ.setdefault("HF_HOME", str(WORK / "hf"))
-# TRELLIS picks its sparse/attention backends from env at import time.
-os.environ.setdefault("ATTN_BACKEND", "flash-attn")
-os.environ.setdefault("SPCONV_ALGO", "native")
+
+WEIGHTS = "microsoft/TRELLIS.2-4B"
 
 
 def log(m):
-    print(f"[trellis {time.strftime('%H:%M:%S')}] {m}", flush=True)
-
-
-PIPELINE_CANDIDATES = [
-    ("trellis.pipelines", "Trellis2ImageTo3DPipeline"),
-    ("trellis.pipelines", "TrellisImageTo3DPipeline"),
-    ("trellis2.pipelines", "Trellis2ImageTo3DPipeline"),
-]
-WEIGHT_CANDIDATES = [
-    "microsoft/TRELLIS.2",
-    "microsoft/TRELLIS-2",
-    "microsoft/TRELLIS-image-large",
-]
-
-
-def resolve_pipeline():
-    """First (module, class) pair that imports. Returns (cls, name)."""
-    errs = []
-    for mod, cls in PIPELINE_CANDIDATES:
-        try:
-            m = __import__(mod, fromlist=[cls])
-            return getattr(m, cls), f"{mod}.{cls}"
-        except Exception as e:
-            errs.append(f"{mod}.{cls}: {type(e).__name__}: {str(e)[:120]}")
-    raise SystemExit("no TRELLIS pipeline class resolved:\n  " + "\n  ".join(errs))
+    print(f"[trellis2 {time.strftime('%H:%M:%S')}] {m}", flush=True)
 
 
 def main():
@@ -60,96 +38,87 @@ def main():
     ap.add_argument("--image", required=True)
     ap.add_argument("--out", default="/workspace/job/out")
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--simplify", type=float, default=0.95)
-    ap.add_argument("--texture-size", type=int, default=1024)
+    ap.add_argument("--texture-size", type=int, default=2048)
+    ap.add_argument("--decimation-target", type=int, default=200000)
+    ap.add_argument("--weights", default=WEIGHTS)
     a = ap.parse_args()
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(REPO))
+    os.chdir(REPO)          # example.py reads assets/ by relative path
 
     import torch
     from PIL import Image
 
-    report = {"image": a.image, "seed": a.seed}
+    from trellis2.pipelines import Trellis2ImageTo3DPipeline
+    import o_voxel
+
+    report = {"model": "TRELLIS.2", "weights": a.weights, "image": a.image,
+              "seed": a.seed, "texture_size": a.texture_size}
     log(f"torch {torch.__version__} cuda={torch.cuda.is_available()}")
 
-    cls, name = resolve_pipeline()
-    log(f"pipeline class: {name}")
-    report["pipeline_class"] = name
-
-    pipe, used = None, None
-    for repo_id in WEIGHT_CANDIDATES:
-        try:
-            log(f"loading weights {repo_id}...")
-            pipe = cls.from_pretrained(repo_id)
-            used = repo_id
-            break
-        except Exception as e:
-            log(f"  {repo_id} failed: {type(e).__name__}: {str(e)[:160]}")
-    if pipe is None:
-        raise SystemExit("no TRELLIS weights could be loaded")
-    log(f"loaded {used}")
-    report["weights"] = used
-
+    log(f"loading {a.weights} (4B params, expect a slow first load)...")
+    t_load = time.time()
+    pipe = Trellis2ImageTo3DPipeline.from_pretrained(a.weights)
     pipe.cuda()
+    log(f"loaded in {time.time() - t_load:.0f}s")
+
     img = Image.open(a.image).convert("RGBA")
     log(f"input image {img.size}")
 
     t0 = time.time()
     try:
-        outputs = pipe.run(img, seed=a.seed)
+        mesh = pipe.run(img, seed=a.seed)[0]
+    except TypeError:
+        # Older signature takes no seed kwarg.
+        mesh = pipe.run(img)[0]
     except Exception as e:
         log(f"FAILED during run: {e}")
         traceback.print_exc()
         report.update({"ok": False, "error": str(e)[:600]})
-        (out / "trellis_report.json").write_text(json.dumps(report, indent=2))
+        (out / "trellis2_report.json").write_text(json.dumps(report, indent=2))
         raise
     gen_sec = time.time() - t0
-    log(f"generation done in {gen_sec:.0f}s; keys: {list(outputs.keys())}")
-
     peak = torch.cuda.max_memory_allocated() / 2**30
-    log(f"peak VRAM {peak:.1f} GB")
+    log(f"generated in {gen_sec:.0f}s, peak VRAM {peak:.1f} GB")
 
-    # to_glb wants a gaussian (for colour) plus the mesh. Export whatever this
-    # build actually produced rather than assuming both are present.
-    from trellis.utils import postprocessing_utils
-
-    wrote = []
     try:
-        mesh = outputs["mesh"][0]
-        appearance = (outputs.get("gaussian") or outputs.get("radiance_field"))[0]
-        glb = postprocessing_utils.to_glb(
-            appearance, mesh, simplify=a.simplify, texture_size=a.texture_size)
-        glb.export(str(out / "trellis_textured.glb"))
-        wrote.append("trellis_textured.glb")
+        mesh.simplify(16777216)          # nvdiffrast's hard limit
     except Exception as e:
-        log(f"to_glb failed: {type(e).__name__}: {str(e)[:200]}")
-        traceback.print_exc()
+        log(f"simplify skipped ({type(e).__name__}: {str(e)[:120]})")
 
-    # Bank the bare geometry too - a failed texture bake should not cost us the
-    # shape, which is the half the bake-off is actually comparing.
-    try:
-        import trimesh
-        m = outputs["mesh"][0]
-        v = m.vertices.detach().cpu().numpy() if hasattr(m, "vertices") else None
-        f = m.faces.detach().cpu().numpy() if hasattr(m, "faces") else None
-        if v is not None and f is not None:
-            trimesh.Trimesh(v, f).export(str(out / "trellis_shape.glb"))
-            wrote.append("trellis_shape.glb")
-            report["faces"] = int(len(f))
-    except Exception as e:
-        log(f"shape export failed: {type(e).__name__}: {str(e)[:200]}")
+    n_faces = int(len(mesh.faces)) if hasattr(mesh, "faces") else None
+    log(f"mesh faces before export: {n_faces:,}" if n_faces else "mesh faces: ?")
 
-    if not wrote:
-        report.update({"ok": False, "error": "generation succeeded but nothing exported"})
-        (out / "trellis_report.json").write_text(json.dumps(report, indent=2))
-        raise SystemExit("nothing exported")
+    log("baking PBR GLB...")
+    t1 = time.time()
+    glb = o_voxel.postprocess.to_glb(
+        vertices=mesh.vertices,
+        faces=mesh.faces,
+        attr_volume=mesh.attrs,
+        coords=mesh.coords,
+        attr_layout=mesh.layout,
+        voxel_size=mesh.voxel_size,
+        aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+        decimation_target=a.decimation_target,
+        texture_size=a.texture_size,
+        remesh=True,
+        remesh_band=1,
+        remesh_project=0,
+        verbose=True,
+    )
+    # extension_webp=False: the comparison tooling reads these with trimesh,
+    # which does not decode webp-in-GLB.
+    glb.export(str(out / "trellis2_textured.glb"), extension_webp=False)
+    bake_sec = time.time() - t1
+    log(f"exported in {bake_sec:.0f}s")
 
-    report.update({"ok": True, "sec": round(gen_sec), "peak_vram_gb": round(peak, 2),
-                   "files": wrote})
-    (out / "trellis_report.json").write_text(json.dumps(report, indent=2))
-    log(f"wrote {', '.join(wrote)}")
+    report.update({"ok": True, "sec": round(gen_sec), "bake_sec": round(bake_sec),
+                   "peak_vram_gb": round(peak, 2), "faces": n_faces,
+                   "files": ["trellis2_textured.glb"]})
+    (out / "trellis2_report.json").write_text(json.dumps(report, indent=2))
+    log("done")
 
 
 if __name__ == "__main__":
