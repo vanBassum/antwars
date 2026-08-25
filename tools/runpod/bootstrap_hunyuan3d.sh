@@ -29,7 +29,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq git build-essential libgl1 libglib2.0-0 libegl1 libgles2 ninja-build >/dev/null
+apt-get install -y -qq git build-essential libgl1 libopengl0 libglib2.0-0 libegl1 libgles2 ninja-build >/dev/null
 
 cd "$WORK"
 if [ ! -d "$REPO/.git" ]; then
@@ -44,6 +44,23 @@ pip install -q --upgrade pip
 grep -viE '^\s*(torch|torchvision|torchaudio)\b' requirements.txt > /tmp/req.txt
 pip install -q -r /tmp/req.txt
 pip install -q "huggingface_hub[cli]" onnxruntime rembg pymeshlab trimesh pygltflib
+
+# Hunyuan3D-2's requirements.txt does not pin the HF stack, so pip resolves to
+# current releases - and transformers >=5 hard-requires torch >=2.5. This image
+# ships torch 2.4.1, so transformers silently DISABLES its whole PyTorch
+# backend, and the run dies much later with the very misleading
+# "Dinov2Model requires the PyTorch library but it was not found".
+# These are the versions the model's own HF Space pins. Install them last so
+# they win over whatever requirements.txt pulled in.
+pip install -q "transformers==4.46.0" "diffusers==0.30.0" \
+               "huggingface_hub==0.35.1" "accelerate==1.1.1" "tokenizers<0.21"
+python - <<'PY'
+import sys
+from transformers.utils import is_torch_available
+if not is_torch_available():
+    sys.exit("FATAL: transformers cannot see torch - check the version pins above")
+print("[ok] transformers sees torch")
+PY
 
 # Rasterizer + differentiable renderer are only used by the texture (paint)
 # pipeline, and they compile CUDA - the slowest step here by a wide margin.

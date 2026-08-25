@@ -17,6 +17,7 @@ from pathlib import Path
 os.environ.setdefault("HF_HOME", "/workspace/hf")
 sys.path.insert(0, "/workspace/Hunyuan3D-2")
 
+import trimesh  # noqa: E402
 from PIL import Image  # noqa: E402
 
 
@@ -81,10 +82,38 @@ def main():
     )[0]
     log(f"shape done in {time.time()-t0:.0f}s: {len(mesh.faces)} faces")
 
-    mesh = FloaterRemover()(mesh)
-    mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh, max_facenum=a.target_faces)
-    log(f"cleaned: {len(mesh.faces)} faces")
+    # Bank the raw result before touching it. The diffusion is the expensive
+    # part; a post-processing failure must never cost us the whole run.
+    raw_path = out_dir / "mesh_raw.glb"
+    mesh.export(raw_path)
+    log(f"wrote {raw_path} (unprocessed safety copy)")
+
+    # Hunyuan's cleanup goes through pymeshlab, which silently loses its
+    # importers when its Qt plugins cannot load (missing libOpenGL.so.0 ->
+    # "Unknown format for load: ply"). Fall back to trimesh so a broken
+    # pymeshlab degrades the mesh quality instead of killing the job.
+    try:
+        mesh = FloaterRemover()(mesh)
+        mesh = DegenerateFaceRemover()(mesh)
+        mesh = FaceReducer()(mesh, max_facenum=a.target_faces)
+        log(f"cleaned via pymeshlab: {len(mesh.faces)} faces")
+    except Exception as e:
+        log(f"pymeshlab post-processing failed ({e}); falling back to trimesh")
+        traceback.print_exc()
+        mesh.update_faces(mesh.nondegenerate_faces())
+        mesh.remove_unreferenced_vertices()
+        comps = mesh.split(only_watertight=False)
+        if len(comps) > 1:
+            biggest = max(len(c.faces) for c in comps)
+            keep = [c for c in comps if len(c.faces) >= 0.02 * biggest]
+            log(f"dropped {len(comps) - len(keep)} floater(s) of {len(comps)}")
+            mesh = trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
+        if len(mesh.faces) > a.target_faces:
+            try:
+                mesh = mesh.simplify_quadric_decimation(face_count=a.target_faces)
+            except Exception as e2:
+                log(f"decimation unavailable ({e2}); keeping full density")
+        log(f"cleaned via trimesh: {len(mesh.faces)} faces")
 
     shape_path = out_dir / "mesh_shape.glb"
     mesh.export(shape_path)

@@ -56,6 +56,55 @@ def bg_color(img: Image.Image):
     return img.getpixel((2, 2))
 
 
+def cut_background(img: Image.Image, tol=34) -> Image.Image:
+    """Flat studio background -> transparency, by flood fill from the borders.
+
+    The generator runs rembg/u2net on any RGB input, which costs ~7 CPU-minutes
+    per view set and is pure waste here: the sheet is already matted on a
+    uniform grey. Feeding it RGBA with real alpha skips that entirely.
+
+    Border flood fill rather than a global colour key, because the turret has
+    near-black recesses that a global key would punch holes through - only
+    background connected to the edge is removed.
+    """
+    import numpy as np
+    from collections import deque
+
+    rgb = np.asarray(img.convert("RGB")).astype(np.int16)
+    h, w = rgb.shape[:2]
+    bg = np.median(np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]]),
+                   axis=0)
+    close = (np.abs(rgb - bg).sum(2) <= tol)
+
+    # BFS from every border pixel that matches the background
+    seen = np.zeros((h, w), bool)
+    q = deque()
+    for y in range(h):
+        for x in (0, w - 1):
+            if close[y, x] and not seen[y, x]:
+                seen[y, x] = True
+                q.append((y, x))
+    for x in range(w):
+        for y in (0, h - 1):
+            if close[y, x] and not seen[y, x]:
+                seen[y, x] = True
+                q.append((y, x))
+    while q:
+        y, x = q.popleft()
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < h and 0 <= nx < w and close[ny, nx] and not seen[ny, nx]:
+                seen[ny, nx] = True
+                q.append((ny, nx))
+
+    out = img.convert("RGBA")
+    alpha = np.asarray(out)[:, :, 3].copy()
+    alpha[seen] = 0
+    arr = np.asarray(out).copy()
+    arr[:, :, 3] = alpha
+    return Image.fromarray(arr, "RGBA")
+
+
 def square_pad(crop: Image.Image, fill) -> Image.Image:
     side = int(max(crop.size) * MARGIN)
     out = Image.new("RGB", (side, side), fill)
@@ -67,6 +116,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True)
     ap.add_argument("--out", default="assets/reference")
+    ap.add_argument("--keep-background", action="store_true",
+                    help="emit RGB and let the generator run rembg instead")
     a = ap.parse_args()
 
     src = Image.open(a.input).convert("RGB")
@@ -82,7 +133,7 @@ def main():
     for view, (cx, cy) in QUADRANTS.items():
         q = src.crop((cx * qw, cy * qh, (cx + 1) * qw, (cy + 1) * qh))
         quads[view] = q
-        q.save(whole / f"{view}.png")
+        (q if a.keep_background else cut_background(q)).save(whole / f"{view}.png")
     print(f"views_turret: {len(quads)} views @ {qw}x{qh}")
 
     # ---- per-component views (approach C)
@@ -103,6 +154,8 @@ def main():
                 q = masked
             box = (int(x0 * sx), int(y0 * sy), int(x1 * sx), int(y1 * sy))
             img = square_pad(q.crop(box), fill)
+            if not a.keep_background:
+                img = cut_background(img)
             img.save(d / f"{view}.png")
         print(f"views_turret_{part}: {len(boxes)} views")
 
