@@ -42,7 +42,14 @@ dependency installs rather than inference.
 
 ## Relaunching the bake-off
 
-Each is one command. They are independent; run one or all.
+`assets/reference/` is gitignored, so on a fresh clone restore it first from the
+copy committed with the results — otherwise every command below has no input:
+
+```bash
+mkdir -p assets/reference && cp -r out/turret/00_reference/* assets/reference/
+```
+
+Each run is then one command. They are independent; run one or all.
 
 ```bash
 # P3-SAM — segments the turret we ALREADY have, no regeneration
@@ -96,10 +103,10 @@ python tools/collect_bakeoff.py --raw out/bakeoff --out out/bakeoff --logs <dir-
 2. An SSH keypair at `~/.ssh/runpod_ed25519` — `job.py` generates one on first
    run if absent, so nothing to copy across.
 3. `python -u tools/runpod/job.py status` should list pods (probably none).
-4. `assets/reference/` is **gitignored**. Regenerate the view images from the
-   original sheet with `python tools/make_turret_views.py`, or the bake-off
-   relaunches above will have no input. `out/turret/00_reference/` holds a
-   committed copy of the matted views if the original sheet is gone.
+4. `assets/reference/` is **gitignored** — restore it from `out/turret/00_reference/`
+   (see the Relaunching section), or regenerate from the original sheet with
+   `python tools/make_turret_views.py`. Without it the bake-off relaunches
+   have no input images.
 
 ## Safety model — read before running anything
 
@@ -111,12 +118,14 @@ Three independent layers stop a pod outliving its job:
 2. A **detached local watchdog** DELETEs the pod after `--max-runtime`.
    Survives the launching process dying. **Does not survive the machine going
    away.**
-3. The pod arms its **own** kill timer in `arm_failsafe.sh`, run at the top of
-   every bootstrap. Survives everything except the pod losing network.
+3. The pod arms its **own** kill timer in `arm_failsafe.sh`, run the moment SSH
+   becomes reachable (`5971c5d`). Survives everything except the pod losing
+   network — including the controlling machine going away entirely.
 
-The gap worth knowing: layer 3 only exists once the bootstrap has started. A pod
-still cycling in the CUDA gate has only layers 1 and 2, and layer 2 dies with
-the machine. **Before shutting a machine down, run:**
+Layer 3 used to be armed at the top of each bootstrap, which left a window where
+a pod cycling in the CUDA gate had only the local watchdog protecting it. That
+is closed, but it is still worth checking before you walk away — a pod that
+never got as far as SSH has no layer 3. **Before shutting a machine down:**
 
 ```bash
 python -u tools/runpod/job.py status     # see what is live
