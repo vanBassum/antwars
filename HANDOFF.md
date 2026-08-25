@@ -67,7 +67,7 @@ python -u tools/runpod/job.py run \
   --image "runpod/pytorch:1.1.0-cu1281-torch260-ubuntu2204" \
   --bootstrap tools/runpod/bootstrap_partcrafter.sh \
   --upload assets/reference/views_turret/front.png \
-  --cmd "cd /workspace/PartCrafter && python scripts/inference_partcrafter.py --image_path /workspace/job/in/front.png --num_parts 3 --tag turret --output_dir /workspace/job/out --num_inference_steps 50" \
+  --cmd "cd /workspace/PartCrafter && PYTHONPATH=/workspace/PartCrafter python scripts/inference_partcrafter.py --image_path /workspace/job/in/front.png --num_parts 3 --tag turret --output_dir /workspace/job/out --num_inference_steps 50" \
   --out out/bakeoff/partcrafter --max-runtime 4200 --volume 60
 
 # TRELLIS.2 — 4B, PBR materials. SLOW to provision.
@@ -184,6 +184,36 @@ around $1.10-1.40/hr aggregate.
   80k-face turret). Labels transfer back onto the full mesh by
   nearest-face-centroid, which is what `tools/apply_p3sam_parts.py` does — so if
   the point-count route stalls, this is the next lever.
+- **TRELLIS.2 is blocked on a gated HuggingFace repo.** The pipeline pulls Meta's
+  `facebook/dinov3-vitl16-pretrain-lvd1689m` as its image encoder, which is
+  access-restricted: the run dies with `401 / You are trying to access a gated
+  repo` *after* the 4B weights have downloaded fine, so prefetching TRELLIS.2-4B
+  does not avoid it. Needs an HF account granted access on that model page plus a
+  token, and there is **no `HF_TOKEN` plumbing in the pipeline today** — `job.py`
+  passes only `RUNPOD_API_KEY` and `MAX_RUNTIME_SEC` into the pod env. Cost of
+  discovering this: $0.204 for a 25-minute run.
+- **PartCrafter's inference command needs `PYTHONPATH`.** `scripts/inference_partcrafter.py`
+  does `from src.utils...` and `src/` sits at the repo root, but `python scripts/x.py`
+  puts `scripts/` on `sys.path[0]`, not the root - so it dies with
+  `ModuleNotFoundError: No module named 'src'` after a successful bootstrap.
+  Prefix the command with `PYTHONPATH=/workspace/PartCrafter`. Its bootstrap is
+  fast (~90s), so this arm is cheap to retry.
+- **`--attempts` did not cover a host that never opens SSH** (fixed, `8880e7d`).
+  `_connect()` raises while `_gpu_problem()` returns a string, and only the latter
+  reached the rotation, so each dud host burned the full 900s wait and then gave
+  up entirely. Note the fix only helps processes started *after* it - a running
+  job.py has the old code loaded.
+- **The community 24 GB pool goes through bad patches.** On 2026-08-25, five
+  hosts in ~40 minutes either never opened SSH or failed CUDA init. Budget for
+  provisioning waste, or use `--cloud SECURE` at 2-3x the rate when it is bad.
+- **The pod-side failsafe leaks the API key into `ps`.** `arm_failsafe.sh`
+  interpolates `${RUNPOD_API_KEY}` into its detached `bash -c` string, so the key
+  is visible in `/proc/*/cmdline` inside the pod for its whole life - and these
+  bootstraps run a lot of third-party code. `watchdog.py` deliberately avoids
+  this ("never argv"); the pod side should too. Fix is to single-quote the
+  detached block so the child expands the variable from its inherited env.
+  Left as-is by decision on 2026-08-25; rotating the key means killing any pod
+  still holding the old one.
 - **Cut planes do not generalise.** `split_turret_parts.py` assumes the joint is
   a plane perpendicular to a world axis and each part is contiguous in its
   half-space. That already broke on this model — `--gun-radius` exists only
