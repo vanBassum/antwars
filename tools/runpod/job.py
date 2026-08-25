@@ -146,6 +146,26 @@ class PodSession:
 
     # ---------------------------------------------------------------- lifetime
     def __enter__(self):
+        """Provision a usable pod, or terminate whatever was created and raise.
+
+        Python does NOT call __exit__ when __enter__ raises, so an exception in
+        here (SSH never coming up being the common one) would otherwise leak a
+        running, billing pod that only the local watchdog could clean up. Every
+        failure path has to terminate before it re-raises.
+        """
+        try:
+            return self._enter()
+        except BaseException:
+            if self.pod_id and not self.terminated:
+                log(f"provisioning failed - terminating {self.pod_id}")
+                try:
+                    self.terminate()
+                except Exception as e:
+                    log(f"WARNING: cleanup terminate failed: {e} "
+                        f"- the local watchdog is now the only backstop")
+            raise
+
+    def _enter(self):
         ensure_key()
         if self.args.pod_id:
             self.pod_id = self.args.pod_id
