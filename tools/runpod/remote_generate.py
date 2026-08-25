@@ -35,6 +35,13 @@ def main():
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--num-chunks", type=int, default=8000)
     ap.add_argument("--no-texture", action="store_true")
+    # Parameterised so the bake-off can point this at 2.1 instead of 2.0.
+    # Hardcoding the 2.0 ids meant a "2.1" run silently produced a 2.0 mesh -
+    # a wrong result that looks like a right one.
+    ap.add_argument("--repo", default="tencent/Hunyuan3D-2mv",
+                    help="HF repo id for the shape pipeline")
+    ap.add_argument("--subfolder", default="hunyuan3d-dit-v2-mv",
+                    help="weights subfolder within --repo")
     ap.add_argument("--target-faces", type=int, default=40000)
     a = ap.parse_args()
 
@@ -74,9 +81,9 @@ def main():
     if "front" not in images:
         raise SystemExit("front.png is required")
 
-    log("loading shape pipeline (Hunyuan3D-2mv)...")
+    log(f"loading shape pipeline ({a.repo} / {a.subfolder})...")
     pipe = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-        "tencent/Hunyuan3D-2mv", subfolder="hunyuan3d-dit-v2-mv"
+        a.repo, subfolder=a.subfolder
     )
     pipe.enable_flashvdm(topk_mode="merge")
 

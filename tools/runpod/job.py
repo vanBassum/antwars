@@ -539,6 +539,11 @@ def _add_pod_args(p, runtime=MAX_RUNTIME_SEC, disk=80, volume=80):
     p.add_argument("--volume", type=int, default=volume)
     p.add_argument("--gpu-type", default=None,
                    help="pin one GPU type id instead of picking the cheapest")
+    p.add_argument("--shape-only", action="store_true",
+                   help="skip texture generation. Exported to the pod as "
+                        "SKIP_TEXGEN, which the bootstraps read to avoid "
+                        "building paint-pipeline CUDA extensions they will "
+                        "not use.")
     p.add_argument("--min-vram", type=int, default=None,
                    help=f"minimum GPU VRAM in GB (default {MIN_VRAM_GB}). "
                         "P3-SAM needs 48 at full prompt count; Hunyuan3D-2.1's "
@@ -571,9 +576,6 @@ def main():
     t.add_argument("--target-faces", type=int, default=80000)
     t.add_argument("--part-octree", type=int, default=320)
     t.add_argument("--part-faces", type=int, default=40000)
-    t.add_argument("--shape-only", action="store_true",
-                   help="skip texturing: no CUDA rasterizer build, no paint "
-                        "weights, much faster bootstrap")
     t.add_argument("--skip-parts", action="store_true")
     t.add_argument("--skip-segment", action="store_true")
     _add_pod_args(t)
