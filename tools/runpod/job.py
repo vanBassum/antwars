@@ -315,6 +315,29 @@ class PodSession:
         wait_ssh_ready(self.host, self.port)
         self.sh("mkdir -p /workspace")
         self.write_env()
+        self._arm_failsafe()
+
+    def _arm_failsafe(self):
+        """Arm the pod's own kill timer as soon as it is reachable.
+
+        This used to happen at the top of each bootstrap, which left a window:
+        a pod cycling in the CUDA gate, or one whose bootstrap had not started
+        yet, was protected only by the detached LOCAL watchdog - and that dies
+        with the machine it was launched from. Arming here means a pod can
+        always terminate itself, whatever happens to the controller.
+
+        Idempotent: arm_failsafe.sh no-ops if /tmp/.selfdestruct_armed exists,
+        so the bootstrap re-running it later changes nothing.
+        """
+        try:
+            self.put(HERE / "arm_failsafe.sh", "/workspace/arm_failsafe.sh")
+            r = self.sh("bash /workspace/arm_failsafe.sh", check=False,
+                        stream=False)
+            out = (r.stdout or "").strip().splitlines()
+            log(out[-1] if out else "failsafe armed")
+        except Exception as e:
+            log(f"WARNING: could not arm the pod-side failsafe: {e} "
+                f"- the local watchdog is the only backstop for this pod")
 
     # ---------------------------------------------------------------- helpers
     def sh(self, cmd, raw=False, **kw):
