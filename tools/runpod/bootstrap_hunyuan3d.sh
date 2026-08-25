@@ -106,14 +106,35 @@ export HF_HOME="$WORK/hf"
 mkdir -p "$HF_HOME"
 python - <<'PY'
 import os
+import glob
 from huggingface_hub import snapshot_download
+
+# Use "**", never "*": these repos nest weights two levels down
+# (subfolder/vae/diffusion_pytorch_model.safetensors). A one-level glob fetches
+# the configs and directory structure but no weights, which does not error -
+# it produces a snapshot that looks complete and only fails much later with
+# "no file named diffusion_pytorch_model.safetensors found in directory".
+
 # multiview shape model (front/back/left/right conditioning)
-snapshot_download("tencent/Hunyuan3D-2mv", allow_patterns=["hunyuan3d-dit-v2-mv/*", "*.json", "*.yaml"])
-# texture paint pipeline lives in the base 2.0 repo
+snapshot_download("tencent/Hunyuan3D-2mv",
+                  allow_patterns=["hunyuan3d-dit-v2-mv/**", "*.json", "*.yaml"])
+
 if os.environ.get("SKIP_TEXGEN") == "1":
     print("skipping paint weights (SKIP_TEXGEN=1)")
 else:
-    snapshot_download("tencent/Hunyuan3D-2", allow_patterns=["hunyuan3d-paint-v2-0*/*", "hunyuan3d-delight-v2-0/*", "*.json", "*.yaml"])
+    # texture paint pipeline lives in the base 2.0 repo; -turbo is the default
+    # subfolder Hunyuan3DPaintPipeline.from_pretrained resolves to.
+    snap = snapshot_download("tencent/Hunyuan3D-2", allow_patterns=[
+        "hunyuan3d-paint-v2-0-turbo/**", "hunyuan3d-delight-v2-0/**", "*.json"])
+    # Prove the weights actually landed rather than trusting the call returned.
+    weights = glob.glob(os.path.join(snap, "hunyuan3d-paint-v2-0-turbo",
+                                     "**", "*.safetensors"), recursive=True)
+    weights += glob.glob(os.path.join(snap, "hunyuan3d-paint-v2-0-turbo",
+                                      "**", "*.bin"), recursive=True)
+    if not weights:
+        raise SystemExit("FATAL: paint weights missing after download - "
+                         "check the allow_patterns globs")
+    print(f"paint weights: {len(weights)} files")
 print("weights ready")
 PY
 

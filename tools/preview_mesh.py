@@ -28,7 +28,35 @@ VIEWS = [
 ]
 
 
-def render(points, res, h_ax, v_ax, d_ax, flip_h, flip_v, d_sign, lo, hi):
+def sample_colours(mesh, face_idx, points):
+    """Per-sample RGB from the mesh's texture, or None if it has no texture.
+
+    Depth shading alone cannot show whether texturing worked, which is most of
+    what there is to review on a generated asset.
+    """
+    vis = getattr(mesh, "visual", None)
+    uv = getattr(vis, "uv", None)
+    mat = getattr(vis, "material", None)
+    img = getattr(mat, "baseColorTexture", None) if mat is not None else None
+    if uv is None or img is None:
+        return None
+    try:
+        tri = mesh.triangles[face_idx]
+        bary = trimesh.triangles.points_to_barycentric(tri, points)
+        face_uv = np.asarray(uv)[mesh.faces[face_idx]]          # (n, 3, 2)
+        p_uv = (bary[:, :, None] * face_uv).sum(axis=1)         # (n, 2)
+        tex = np.asarray(img.convert("RGB"))
+        th, tw = tex.shape[:2]
+        px = np.clip((p_uv[:, 0] % 1.0) * (tw - 1), 0, tw - 1).astype(int)
+        py = np.clip((1.0 - (p_uv[:, 1] % 1.0)) * (th - 1), 0, th - 1).astype(int)
+        return tex[py, px]
+    except Exception as e:
+        print(f"  (texture sampling failed: {e})")
+        return None
+
+
+def render(points, res, h_ax, v_ax, d_ax, flip_h, flip_v, d_sign, lo, hi,
+           colours=None):
     span = float(np.max(hi - lo)) or 1.0
     centre = (lo + hi) / 2.0
     pad = 0.06
@@ -45,16 +73,30 @@ def render(points, res, h_ax, v_ax, d_ax, flip_h, flip_v, d_sign, lo, hi):
         y = res - 1 - y
     depth = points[:, d_ax] * d_sign
 
+    yi, xi = y.astype(int), x.astype(int)
     buf = np.full((res, res), np.inf)
-    np.minimum.at(buf, (y.astype(int), x.astype(int)), -depth)
-
+    np.minimum.at(buf, (yi, xi), -depth)
     hit = np.isfinite(buf)
-    img = np.zeros((res, res), np.uint8)
+
+    if colours is None:
+        img = np.zeros((res, res), np.uint8)
+        if hit.any():
+            d = buf[hit]
+            norm = (d - d.min()) / ((d.max() - d.min()) or 1.0)
+            img[hit] = (40 + (1.0 - norm) * 215).astype(np.uint8)
+        return np.dstack([img] * 3)
+
+    # Keep the colour of whichever sample actually won the depth test, then
+    # shade it by depth so the form still reads.
+    out = np.zeros((res, res, 3), np.uint8)
+    winner = np.isclose(buf[yi, xi], -depth)
+    out[yi[winner], xi[winner]] = colours[winner]
     if hit.any():
         d = buf[hit]
         norm = (d - d.min()) / ((d.max() - d.min()) or 1.0)
-        img[hit] = (40 + (1.0 - norm) * 215).astype(np.uint8)
-    return img
+        shade = (0.45 + 0.55 * (1.0 - norm))[:, None]
+        out[hit] = np.clip(out[hit] * shade, 0, 255).astype(np.uint8)
+    return out
 
 
 def main():
@@ -63,6 +105,8 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--res", type=int, default=420)
     ap.add_argument("--samples", type=int, default=400000)
+    ap.add_argument("--no-texture", action="store_true",
+                    help="depth shading only, even if the mesh has a texture")
     ap.add_argument("--grid", type=float, default=None,
                     help="draw gridlines every N mesh units, with labels")
     a = ap.parse_args()
@@ -71,8 +115,10 @@ def main():
     lo, hi = mesh.bounds
     print(f"{len(mesh.faces)} faces  bounds {np.round(lo,3)} .. {np.round(hi,3)}")
 
-    pts, _ = trimesh.sample.sample_surface(mesh, a.samples)
+    pts, fidx = trimesh.sample.sample_surface(mesh, a.samples)
     pts = np.asarray(pts)
+    cols = None if a.no_texture else sample_colours(mesh, fidx, pts)
+    print("textured preview" if cols is not None else "depth-shaded preview")
 
     res = a.res
     sheet = Image.new("RGB", (res * len(VIEWS), res + 22), (18, 18, 20))
@@ -82,8 +128,8 @@ def main():
     pad = 0.06
 
     for i, (name, h_ax, v_ax, d_ax, fh, fv, ds) in enumerate(VIEWS):
-        g = render(pts, res, h_ax, v_ax, d_ax, fh, fv, ds, lo, hi)
-        tile = Image.fromarray(np.dstack([g, g, g]))
+        g = render(pts, res, h_ax, v_ax, d_ax, fh, fv, ds, lo, hi, colours=cols)
+        tile = Image.fromarray(g)
         ox = i * res
 
         if a.grid:
@@ -114,3 +160,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# NOTE: this previewer reads UVs via trimesh, which does not honour
+# KHR_mesh_quantization / KHR_texture_transform. A gltfpack output will render
+# as one flat texel here even though it is correct in a real glTF viewer.
+# Preview the pre-decimation file instead.

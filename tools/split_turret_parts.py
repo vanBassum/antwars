@@ -74,6 +74,8 @@ def main():
                     help="tube radius around the barrel axis")
     ap.add_argument("--gun-axis-height", type=float, default=None,
                     help="height of the barrel axis (default: mesh centroid)")
+    ap.add_argument("--cap", action="store_true",
+                    help="close the openings left by the cuts")
     ap.add_argument("--inspect", action="store_true",
                     help="print geometry stats and exit")
     a = ap.parse_args()
@@ -95,6 +97,7 @@ def main():
                         a.gun_radius, a.gun_axis_height)
     finish_parts(mesh, masks, Path(a.out_dir), a.name, up, fwd, fwd_sign,
                  a.base_top, a.gun_front,
+                 cap=a.cap,
                  meta_extra={"method": "cut-planes",
                              "cuts": {"base_top": a.base_top,
                                       "gun_front": a.gun_front,

@@ -60,15 +60,39 @@ def submesh_by_faces(mesh, face_mask):
 
 
 def largest_components(mesh, min_frac=0.02):
-    """Drop stray islands that a cut or a mislabelled segment left behind."""
-    parts = mesh.split(only_watertight=False)
-    if len(parts) <= 1:
+    """Drop stray islands that a cut or a mislabelled segment left behind.
+
+    Connectivity is computed on a position-welded copy. A textured mesh
+    duplicates vertices along every UV seam, so splitting it directly reports
+    hundreds of "islands" across what is physically one continuous surface -
+    and a size filter then deletes most of the part. Welding is only used to
+    decide which faces belong together; the faces returned are the original
+    ones, so UVs survive.
+    """
+    welded = mesh.copy()
+    try:
+        welded.merge_vertices()          # positional weld, face order preserved
+    except Exception:
+        pass
+    if len(welded.faces) != len(mesh.faces):
+        return mesh                      # cannot map labels back safely
+
+    labels = trimesh.graph.connected_component_labels(
+        welded.face_adjacency, node_count=len(welded.faces))
+    ids, counts = np.unique(labels, return_counts=True)
+    if len(ids) <= 1:
         return mesh
-    parts = sorted(parts, key=lambda m: len(m.faces), reverse=True)
-    keep = [p for p in parts if len(p.faces) >= min_frac * len(mesh.faces)]
-    if len(parts) - len(keep):
-        print(f"    dropped {len(parts) - len(keep)} island(s) < {min_frac:.0%}")
-    return trimesh.util.concatenate(keep) if len(keep) > 1 else keep[0]
+
+    biggest = counts.max()
+    keep_ids = ids[counts >= min_frac * biggest]
+    dropped = len(ids) - len(keep_ids)
+    face_mask = np.isin(labels, keep_ids)
+    if dropped:
+        print(f"    dropped {dropped} island(s) < {min_frac:.0%} of the largest "
+              f"({int((~face_mask).sum())} faces of {len(mesh.faces)})")
+    if face_mask.all():
+        return mesh
+    return mesh.submesh([np.flatnonzero(face_mask)], append=True, repair=False)
 
 
 def part_pivot(name, part_mesh, up, fwd, fwd_sign, base_top, gun_front):
@@ -127,14 +151,53 @@ def build_and_export(parts, pivots, out_dir, name, meta_extra=None):
     return combined
 
 
+def cap_cuts(mesh, label=""):
+    """Close the openings a cut leaves behind.
+
+    Splitting by whole faces leaves each part open where it met its neighbour
+    (base open on top, head open at the mantlet, gun open at the breech). Those
+    are hidden in the assembled turret, but the head yaws and the gun spins, so
+    a seam can swing into view - and an open boundary reads as a hole to
+    anything doing backface culling.
+    """
+    before = boundary_edge_count(mesh)
+    if not before:
+        return mesh
+    filled = mesh.copy()
+    try:
+        filled.fill_holes()
+    except Exception as e:
+        print(f"    cap failed on {label}: {e}")
+        return mesh
+    after = boundary_edge_count(filled)
+    if after >= before:
+        # trimesh's fill_holes only closes small simple loops; a plane cut
+        # leaves long irregular boundaries it will not touch. Report honestly
+        # rather than printing "capped" over an unchanged mesh.
+        print(f"    cap had no effect on {label}: {before} boundary edges remain "
+              f"(cut rims are too irregular for fill_holes)")
+        return mesh
+    print(f"    capped {label}: boundary edges {before} -> {after}"
+          f"{'  (watertight)' if filled.is_watertight else ''}")
+    return filled
+
+
+def boundary_edge_count(mesh) -> int:
+    """Edges used by exactly one face, i.e. the rim of a hole."""
+    _, counts = np.unique(mesh.edges_sorted, axis=0, return_counts=True)
+    return int((counts == 1).sum())
+
+
 def finish_parts(mesh, masks, out_dir, name, up, fwd, fwd_sign,
-                 base_top, gun_front, meta_extra=None):
+                 base_top, gun_front, meta_extra=None, cap=False):
     """masks: {'Base': bool[nfaces], 'Head': ..., 'Gun': ...} -> exported GLBs."""
     parts, pivots = {}, {}
     for part_name in PART_ORDER:
         mask = masks[part_name]
         print(f"\n[{part_name}] {int(mask.sum())} faces ({mask.mean():.1%})")
         p = largest_components(submesh_by_faces(mesh, mask))
+        if cap:
+            p = cap_cuts(p, part_name)
         pivot = part_pivot(part_name, p, up, fwd, fwd_sign, base_top, gun_front)
         p.apply_translation(-pivot)
         parts[part_name], pivots[part_name] = p, pivot
